@@ -1,6 +1,6 @@
 // Writes and plays thousands of races and checks every rule, after every single action:
 //  - no horse hops more than hopCap (110% of the gates, rounded up)
-//  - until someone finishes, the leader is never more than leadCap (25% of the gates, rounded up) ahead of 2nd
+//  - until someone finishes, the leader is never more than leadCap (15% of the gates, rounded up) ahead of 2nd
 //  - no horse gets more than effectCap boosts or setbacks (30% of the gates, rounded up)
 //  - the same seed always writes the same race, and playing it agrees with what was written
 // and prints race lengths, gate stops, how often a race ends with a bolt, and win rates per lane.
@@ -10,7 +10,7 @@ const N = +process.argv[2] || 2000;
 const gateList = (process.argv[3] || '3,7,20,50,100').split(',').map(Number);
 let bad = 0;
 const fail = msg => { if (bad++ < 20) console.log('PROBLEM:', msg); };
-for (const [g, h, l, c] of [[20, 22, 5, 6], [7, 8, 2, 3], [3, 4, 1, 1], [10, 11, 3, 3], [100, 110, 25, 30]]) {
+for (const [g, h, l, c] of [[20, 22, 3, 6], [7, 8, 2, 3], [3, 4, 1, 1], [10, 11, 2, 3], [50, 55, 8, 15], [100, 110, 15, 30]]) {
   if (hopCap(g) !== h || leadCap(g) !== l || effectCap(g) !== c) fail(`caps for ${g} gates: ${hopCap(g)}/${leadCap(g)}/${effectCap(g)}`);
 }
 for (const gates of gateList) {

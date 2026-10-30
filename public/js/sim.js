@@ -15,8 +15,8 @@
 //  - Each horse can hop forward at most hopCap(gates) times: 110% of the gates, rounded up (22 on 20 gates).
 //    Boosts don't use up hops, but setbacks still cost ground, so a horse set back 5 times on 20 gates can
 //    only reach gate 17 unless it gets boosted.
-//  - Until someone finishes, the leader is never more than leadCap(gates) gates ahead of second place: 25% of
-//    the gates, rounded up (5 on 20 gates). A hop, boost or setback that would break that isn't allowed.
+//  - Until someone finishes, the leader is never more than leadCap(gates) gates ahead of second place: 15% of
+//    the gates, rounded up (3 on 20 gates, 15 on 100). A hop, boost or setback that would break that isn't allowed.
 //  - Whenever every horse has made it through the next gate for the first time, all horses stop for PAUSE
 //    seconds: one random horse is boosted forward one gate and a different one is set back one gate. No horse
 //    gets more than effectCap(gates) boosts, or that many setbacks (30% of the gates, rounded up).
@@ -32,8 +32,8 @@ export const MAX_GATES = 100;
 export const effectCap = gates => Math.ceil((gates * 3) / 10);   // integer math, so 30% of 10 is exactly 3
 /** Most hops forward one horse can make in a race: 110% of the gates, rounded up. */
 export const hopCap = gates => Math.ceil((gates * 11) / 10);
-/** The most the leader can be ahead of second place: 25% of the gates, rounded up. */
-export const leadCap = gates => Math.ceil(gates / 4);
+/** The most the leader can be ahead of second place: 15% of the gates, rounded up. */
+export const leadCap = gates => Math.ceil((gates * 3) / 20);   // integer math, so 15% of 100 is exactly 15
 export const cleanGates = g => {
   g = Math.round(+g);
   return Number.isFinite(g) ? Math.max(MIN_GATES, Math.min(MAX_GATES, g)) : DEFAULT_GATES;

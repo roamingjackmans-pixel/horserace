@@ -4,7 +4,7 @@ import { NAMES } from './names.js';
 import { cleanLook, isCustom } from './looks.js';
 import { writeRace, playRace, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
 
-export const PROTO = 8;               // bump when the message format, rules or race simulation change
+export const PROTO = 9;               // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;

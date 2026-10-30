@@ -33,8 +33,8 @@ ridiculous horses, and dish out penalties to your friends when you win.
   20, 30 on 100. (If every horse is already at its cap, the race doesn't stop at that gate.)
 - **No runaways.** Each horse can hop forward at most **110% of the gates, rounded up** (22 hops on 20 gates).
   Boosts don't use up hops, but setbacks still cost ground: a horse set back 5 times on 20 gates can only
-  reach gate 17 unless it's boosted. And until someone finishes, the leader is never more than **25% of the
-  gates, rounded up** (5 on 20 gates) ahead of second place; the die simply won't pick a move that breaks
+  reach gate 17 unless it's boosted. And until someone finishes, the leader is never more than **15% of the
+  gates, rounded up** (3 on 20 gates, 15 on 100) ahead of second place; the die simply won't pick a move that breaks
   either rule. If no horse is allowed to move at all, the one furthest ahead wins and bolts for the line
   (this essentially never happens).
 - **Every race is written before it's run.** When the host starts a race, the game writes out the whole thing
