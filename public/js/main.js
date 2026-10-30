@@ -337,9 +337,21 @@ function renderPlayers(s) {
   const pid = myPid(), isHost = s.hostPid === pid;
   const online = s.order.filter(id => s.players[id] && s.players[id].on).length;
   $('#playerCount').textContent = `${online}/${E.MAX_PLAYERS} here${s.order.length > online ? `, ${s.order.length - online} away` : ''}`;
-  $('#players').innerHTML = s.order.map(id => {
+  // ranked by chips won (then fewest penalties), so it reshuffles as each race's results come in
+  const board = E.standings(s);
+  const ranked = board.some(x => s.players[x.pid].races > 0);   // no ranks until someone has raced
+  if (s.phase === 'racing' && (!ui.rankBefore || ui.rankBefore.raceNo !== s.raceNo)) {
+    ui.rankBefore = { raceNo: s.raceNo, ranked, ranks: new Map(board.map(x => [x.pid, x.rank])) };
+  }
+  // who moved since the last race (shown until the next one starts)
+  const rb = ui.rankBefore && ui.rankBefore.ranked && ((s.phase === 'results' && ui.rankBefore.raceNo === s.raceNo) || (s.phase === 'betting' && ui.rankBefore.raceNo === s.raceNo - 1)) ? ui.rankBefore.ranks : null;
+  const box = $('#players');
+  const before = new Map([...box.children].map(el => [el.dataset.pid, el.getBoundingClientRect().top]));
+  box.innerHTML = board.map(({ pid: id, rank }) => {
     const p = s.players[id];
     if (!p) return '';
+    const was = rb && rb.get(id), moved = was ? was - rank : 0;
+    const badge = ranked ? `<div class="prank ${rank <= 3 ? 'top' : ''}" title="Rank ${rank}">${['🥇', '🥈', '🥉'][rank - 1] || rank}${moved ? `<span class="pmove ${moved > 0 ? 'up' : 'down'}">${moved > 0 ? '▲' : '▼'}${Math.abs(moved)}</span>` : ''}</div>` : '';
     const pk = s.picks[id];
     let status = '';
     if (s.phase === 'betting') status = pk ? `${dot(pk.h)} #${pk.h + 1} ${esc(s.horses[pk.h].name)} · ${pk.bet} chips` : (p.on ? 'Choosing a horse…' : '');
@@ -350,8 +362,8 @@ function renderPlayers(s) {
       else if (po) status = `#${po.h + 1} lost · took ${plural(po.bet, 'penalty', 'penalties')}`;
       else status = 'Sat this one out';
     }
-    return `<div class="player ${id === pid ? 'me' : ''} ${p.on ? '' : 'off'}">
-      <div class="pav">${esc(p.av)}</div>
+    return `<div class="player ${id === pid ? 'me' : ''} ${p.on ? '' : 'off'}" data-pid="${esc(id)}">
+      ${badge}<div class="pav">${esc(p.av)}</div>
       <div class="pbody">
         <div class="pname">${esc(p.name)}${id === s.hostPid ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? (p.relay ? '<span class="tag relay" title="Connected through the backup relay (a direct connection didn\'t work for them)">📡 RELAY</span>' : '') : '<span class="tag away">AWAY</span>'}</div>
         <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>🤕 <b>${p.taken}</b> penalties</span><span title="Achievements unlocked">🏅 <b>${p.ach || 0}</b></span></div>
@@ -360,6 +372,18 @@ function renderPlayers(s) {
       ${isHost && !p.on ? `<button class="premove" data-remove="${esc(id)}" title="Remove from the lobby">✕</button>` : ''}
     </div>`;
   }).join('');
+  // slide rows from where they were to their new place
+  for (const el of box.children) {
+    const top = before.get(el.dataset.pid);
+    if (top == null) continue;
+    const dy = top - el.getBoundingClientRect().top;
+    if (Math.abs(dy) < 1) continue;
+    el.style.transition = 'none';
+    el.style.transform = `translateY(${dy}px)`;
+    el.getBoundingClientRect();
+    el.style.transition = 'transform .7s cubic-bezier(.2, .8, .2, 1)';
+    el.style.transform = '';
+  }
   const edit = $('#players [data-edit]');
   if (edit) edit.onclick = () => editProfile();
   $('#players').querySelectorAll('[data-remove]').forEach(b => b.onclick = () => {

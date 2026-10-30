@@ -101,6 +101,22 @@ export function addPlayer(s, p) {
 /** How many achievements a player says they have (0 to all of them). */
 const achCount = v => { const n = int(v); return n >= 0 ? Math.min(ACH_COUNT, n) : 0; };
 
+/**
+ * The leaderboard: most chips won first, then fewest penalties taken, then who joined first. Players level on
+ * chips and penalties share a rank (1, 1, 3...). Returns [{ pid, rank }] in order.
+ */
+export function standings(s) {
+  const ids = s.order.filter(id => s.players[id]);
+  const P = id => s.players[id];
+  ids.sort((a, b) => P(b).chips - P(a).chips || P(a).taken - P(b).taken || P(a).n - P(b).n);
+  let rank = 0;
+  return ids.map((pid, i) => {
+    const prev = i ? P(ids[i - 1]) : null;
+    if (!prev || prev.chips !== P(pid).chips || prev.taken !== P(pid).taken) rank = i + 1;
+    return { pid, rank };
+  });
+}
+
 export function setOnline(s, pid, on) {
   const p = s.players[pid];
   if (!p || p.on === on) return false;

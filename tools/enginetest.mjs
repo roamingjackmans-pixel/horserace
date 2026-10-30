@@ -113,6 +113,19 @@ E.apply(s, 'B', { k: 'start' }, 5000); s.race.winner = 1; E.tick(s, s.race.endsA
 ok(Object.keys(s.res.pools).length === 0, 'no winners, no penalties to hand out');
 ok(s.players.A.taken === 7, 'everyone who bet still takes their bet in penalties when nobody wins');
 ok(JSON.stringify(s).length < 6000, 'state stays small: ' + JSON.stringify(s).length + ' bytes');
+// the leaderboard: most chips, then fewest penalties; level players share a rank
+{
+  const t = E.newRoom('22222', { pid: 'a', name: 'A' }, 1000);
+  for (const id of ['b', 'c', 'd', 'e']) E.addPlayer(t, { pid: id, name: id.toUpperCase() });
+  Object.assign(t.players.a, { chips: 5, taken: 10 });
+  Object.assign(t.players.b, { chips: 12, taken: 30 });
+  Object.assign(t.players.c, { chips: 5, taken: 2 });
+  Object.assign(t.players.d, { chips: 5, taken: 2 });
+  Object.assign(t.players.e, { chips: 0, taken: 0 });
+  const st = E.standings(t);
+  ok(st.map(x => x.pid).join('') === 'bcdae', 'leaderboard order: ' + st.map(x => x.pid).join(''));
+  ok(st.map(x => x.rank).join() === '1,2,2,4,5', 'tied players share a rank: ' + st.map(x => x.rank).join());
+}
 // up to 8 players online at once; seats of players who left don't count, but they can't come back into a full lobby
 {
   const t = E.newRoom('54321', { pid: 'h', name: 'Host' }, 1000);

@@ -49,8 +49,10 @@ ridiculous horses, and dish out penalties to your friends when you win.
   anyone else, split however you like, but you have to hit at least one person (no mercy). Everyone you hit
   gets a popup saying you attacked them.
 - If your horse loses, you **take penalties equal to your bet**.
-- Under each player's name the lobby keeps a running tally of **chips won and penalties taken** (from lost bets
-  and from attacks).
+- The lobby's **leaderboard** keeps a running tally of each player's **chips won and penalties taken** (from lost
+  bets and from attacks) and ranks them: most chips first, fewest penalties breaking a tie (players level on both
+  share a rank). It reshuffles as each race's results come in, rows slide to their new places, and ▲▼ shows who
+  moved since the last race. Ranks appear once someone has raced.
 
 ## Achievements
 
