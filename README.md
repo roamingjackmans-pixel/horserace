@@ -8,7 +8,8 @@ ridiculous horses, and dish out penalties to your friends when you win.
 ## The rules
 
 - One person **makes a lobby** and shares its **5-number code** (or the invite link, `?room=CODE`).
-- Every race, **4 to 6 horses** show up, each with one of **200 funny names**.
+- Every race, **4 to 6 horses** show up at random, each with one of **200 funny names**. The host can instead
+  pick an exact number from **2 to 8** (changing it deals a new set of horses, and everyone picks again).
 - Each player **picks a horse and bets 1 to 20 chips**. Several people can back the same horse, but only the
   **first person to pick it can rename it**.
 - The track has **20 evenly spaced gates** by default (the last gate is the finish line). The host can set it
@@ -21,7 +22,10 @@ ridiculous horses, and dish out penalties to your friends when you win.
 - Every time **all** the horses make it through the next gate for the first time, every horse stops for a
   moment: **one horse is boosted forward one gate and a different one is set back one gate**.
 - No horse gets more boosts, or more setbacks, than **30% of the gates, rounded up**: 3 each on 7 gates, 6 on
-  20, 30 on 100.
+  20, 30 on 100. (If every horse is already at its cap, the race doesn't stop at that gate.)
+- Horses that cross the finish line keep galloping, right off the screen. Then the results open on a
+  **podium**: the winner reared up on it holding a trophy and cheering, everyone else standing sadly at the
+  bottom. The host clicks **Next race** to go on to the next race.
 - Rough race lengths: 7 gates about 12 seconds, 20 gates about 50 seconds, 50 gates about 2⅓ minutes,
   100 gates about 5 minutes (plus a 4-second countdown).
 - If your horse wins, you **win the chips you bet**, and you get **twice your bet in penalties** to hand out to
@@ -79,6 +83,8 @@ public/              the game (this folder is what gets published)
   js/engine.js       lobby state and rules (host only)
   js/sim.js          deterministic race simulation
   js/render.js       canvas track and cartoon horses
+  js/podium.js       the winner's podium scene after each race
+  dev/podium.html    preview page for the podium scene and horse poses
   js/audio.js        synthesized sound effects
   js/names.js        the 200 horse names
   vendor/peerjs.min.js

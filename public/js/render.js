@@ -13,6 +13,7 @@ function shade(hex, k) {
   return `rgb(${r},${g},${b})`;
 }
 
+/** Draws a two-part leg; returns where the hoof ended up. Angles are from straight down, towards the nose. */
 function limb(ctx, x, y, a1, a2, l1, l2, w1, w2, color, hoof) {
   const kx = x + Math.sin(a1) * l1, ky = y + Math.cos(a1) * l1;
   const fx = kx + Math.sin(a1 + a2) * l2, fy = ky + Math.cos(a1 + a2) * l2;
@@ -21,34 +22,77 @@ function limb(ctx, x, y, a1, a2, l1, l2, w1, w2, color, hoof) {
   ctx.lineWidth = w2; ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(fx, fy); ctx.stroke();
   ctx.fillStyle = hoof;
   ctx.beginPath(); ctx.arc(fx, fy, w2 * 0.62, 0, TAU); ctx.fill();
+  return [fx, fy];
+}
+
+const REAR = 0.62;   // how far a rearing horse tips back (radians)
+
+/** A gold trophy cup, standing on (x, y). */
+export function drawTrophy(ctx, x, y, size = 1) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size, size);
+  const g = ctx.createLinearGradient(-9, 0, 9, 0);
+  g.addColorStop(0, '#c98a12'); g.addColorStop(0.45, '#ffe27a'); g.addColorStop(1, '#d99a18');
+  ctx.fillStyle = g; ctx.strokeStyle = '#8a5a08'; ctx.lineWidth = 1;
+  // base and stem
+  roundRect(ctx, -7, -4, 14, 4, 1.5); ctx.fill(); ctx.stroke();
+  ctx.fillRect(-2, -10, 4, 6);
+  // cup
+  ctx.beginPath(); ctx.moveTo(-9, -24); ctx.lineTo(9, -24); ctx.quadraticCurveTo(9, -10, 0, -10); ctx.quadraticCurveTo(-9, -10, -9, -24); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // handles
+  ctx.strokeStyle = '#e0a420'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(-9, -19, 4, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
+  ctx.beginPath(); ctx.arc(9, -19, 4, -Math.PI * 0.5, Math.PI * 0.5); ctx.stroke();
+  // shine
+  ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillRect(-5, -22, 2, 8);
+  ctx.restore();
 }
 
 /**
  * A side-on cartoon racehorse with jockey, facing right.
  * (x, y) is the tip of the nose at ground level; the horse is about 112*s wide and 86*s tall.
  * phase: gallop cycle (radians); run: 0 = standing still, 1 = full gallop
- * opts.lift: how high off the ground the horse is mid-hop (in the same units; the shadow stays down)
+ * opts.lift    how high off the ground the horse is mid-hop (in the same units; the shadow stays down)
+ * opts.flip    face left instead of right ((x, y) is still the nose)
+ * opts.pose    'rear': up on its hind legs with the front hooves raised
+ * opts.trophy  holding a trophy up in its front hooves (with pose 'rear')
+ * opts.mood    'happy': smiling eyes, open mouth, jockey cheering · 'sad': head hung low, droopy eyes, frown
+ * opts.tear    0..1: a tear rolling down (sad horses)
  */
 export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts = {}) {
   const silk = SILKS[lane % SILKS.length];
   const [coat, mane] = COATS[coatIdx % COATS.length];
   const far = shade(coat, -0.28);
   const hoof = '#2a2320';
-  const lift = opts.lift || 0;
+  const lift = opts.lift || 0, rear = opts.pose === 'rear', happy = opts.mood === 'happy', sad = opts.mood === 'sad';
   ctx.save();
   ctx.translate(x, y);
-  ctx.scale(s, s);
+  ctx.scale(opts.flip ? -s : s, s);
+  // text stays readable when the horse faces left
+  const text = (str, tx, ty) => {
+    if (!opts.flip) return ctx.fillText(str, tx, ty);
+    ctx.save(); ctx.translate(tx, ty); ctx.scale(-1, 1); ctx.fillText(str, 0, 0); ctx.restore();
+  };
   const bob = run ? -Math.abs(Math.sin(phase)) * 3.2 * run : 0;
   // shadow (shrinks while the horse is in the air)
   const sh = Math.max(0.45, 1 - lift / 45);
   ctx.fillStyle = `rgba(0,0,0,${0.18 * sh})`;
-  ctx.beginPath(); ctx.ellipse(-58, 1, 44 * sh, 4.5 * sh, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(rear ? -78 : -58, 1, (rear ? 26 : 44) * sh, 4.5 * sh, 0, 0, TAU); ctx.fill();
   ctx.translate(0, bob - lift);
+  if (rear) { ctx.translate(-84, 0); ctx.rotate(-REAR); ctx.translate(84, 0); }   // tip back onto the hind hooves
   const swing = (o, amp) => Math.sin(phase + o) * amp * run;
   const bend = (o, amp) => Math.max(0, Math.sin(phase + o + 1.3)) * amp * run;
   // far legs
-  limb(ctx, -44, -38, swing(0.6, 0.75), -bend(0.6, 1.1), 17, 18, 6.5, 4.6, far, hoof);
-  limb(ctx, -84, -40, -swing(3.7, 0.7), bend(3.7, 1.0), 17, 19, 7.5, 4.6, far, hoof);
+  if (rear) {
+    const wave = Math.sin(phase * 2) * 0.12;
+    limb(ctx, -44, -38, 1.3 + wave, 0.3, 17, 18, 6.5, 4.6, far, hoof);
+    limb(ctx, -84, -40, -REAR + 0.1, 0.15, 17, 19, 7.5, 4.6, far, hoof);   // (local -REAR is straight down once tipped back)
+  } else {
+    limb(ctx, -44, -38, swing(0.6, 0.75), -bend(0.6, 1.1), 17, 18, 6.5, 4.6, far, hoof);
+    limb(ctx, -84, -40, -swing(3.7, 0.7), bend(3.7, 1.0), 17, 19, 7.5, 4.6, far, hoof);
+  }
   // tail
   ctx.strokeStyle = mane; ctx.lineCap = 'round'; ctx.lineWidth = 7;
   const tw = run ? Math.sin(phase * 0.5) * 5 : 1.5;
@@ -64,34 +108,79 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.beginPath(); ctx.ellipse(-64, -48, 31, 15, 0, 0, TAU); ctx.fill();
   ctx.beginPath(); ctx.ellipse(-84, -47, 13, 14, 0, 0, TAU); ctx.fill(); // rump
   ctx.beginPath(); ctx.ellipse(-42, -47, 12, 13, 0, 0, TAU); ctx.fill(); // chest
-  // near legs
-  limb(ctx, -40, -38, -swing(0, 0.75), -bend(0, 1.1), 17, 18, 7, 5, coat, hoof);
-  limb(ctx, -80, -40, swing(3.1, 0.7), bend(3.1, 1.0), 17, 19, 8, 5, coat, hoof);
-  // neck
+  // near legs (a rearing horse holds its front hooves up high)
+  let hoofUp = null;
+  if (rear) {
+    const wave = Math.sin(phase * 2 + 1) * 0.12;
+    hoofUp = limb(ctx, -40, -38, 1.45 + wave * 0.5, 0.35, 17, 18, 7, 5, coat, hoof);   // held out in front of the face
+    limb(ctx, -80, -40, -REAR - 0.05, 0.2, 17, 19, 8, 5, coat, hoof);
+  } else {
+    limb(ctx, -40, -38, -swing(0, 0.75), -bend(0, 1.1), 17, 18, 7, 5, coat, hoof);
+    limb(ctx, -80, -40, swing(3.1, 0.7), bend(3.1, 1.0), 17, 19, 8, 5, coat, hoof);
+  }
+  // ---- neck and head (a sad horse hangs its head)
+  ctx.save();
+  const headTilt = sad ? 0.55 : happy ? -0.3 : 0;   // hung low when sad, thrown back when happy
+  if (headTilt) { ctx.translate(-40, -50); ctx.rotate(headTilt); ctx.translate(40, 50); }
   ctx.fillStyle = coat;
   ctx.beginPath();
   ctx.moveTo(-50, -58); ctx.lineTo(-20, -80); ctx.lineTo(-6, -70); ctx.lineTo(-32, -38);
   ctx.closePath(); ctx.fill();
-  // head
   ctx.beginPath(); ctx.ellipse(-11, -66, 13, 7.5, 0.62, 0, TAU); ctx.fill();
   ctx.fillStyle = shade(coat, -0.2);
   ctx.beginPath(); ctx.ellipse(-2, -59, 4.5, 4, 0.6, 0, TAU); ctx.fill();  // muzzle
   ctx.fillStyle = '#1b1411';
   ctx.beginPath(); ctx.arc(-1.5, -59.5, 1.1, 0, TAU); ctx.fill();          // nostril
-  // ear
+  // mouth
+  if (happy) {
+    ctx.fillStyle = '#5a1418';
+    ctx.beginPath(); ctx.ellipse(-8, -56.5, 4.6, 2.8, 0.6, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = '#ff8a9a';
+    ctx.beginPath(); ctx.ellipse(-8.6, -55.6, 2.2, 1.3, 0.6, 0, Math.PI); ctx.fill();
+  } else if (sad) {
+    ctx.strokeStyle = '#3b2418'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(-8, -53.2, 3.4, Math.PI * 1.2, Math.PI * 1.85); ctx.stroke();
+  }
+  // ear (flat and droopy when sad)
   ctx.fillStyle = coat;
-  ctx.beginPath(); ctx.moveTo(-22, -77); ctx.lineTo(-21, -88); ctx.lineTo(-15, -78); ctx.closePath(); ctx.fill();
-  // eye (+ blinker hood in the jockey's colour)
+  ctx.beginPath();
+  if (sad) { ctx.moveTo(-22, -77); ctx.lineTo(-32, -81); ctx.lineTo(-17, -78); }
+  else { ctx.moveTo(-22, -77); ctx.lineTo(-21, -88); ctx.lineTo(-15, -78); }
+  ctx.closePath(); ctx.fill();
+  // eye, with a blinker hood in the jockey's colour
   ctx.fillStyle = silk.bg === '#f3efe6' ? '#d8312c' : silk.bg;
   ctx.beginPath(); ctx.ellipse(-15, -70, 4.4, 3.4, 0.5, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-14, -70, 2.2, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-13.4, -70, 1.3, 0, TAU); ctx.fill();
+  if (happy) {
+    // closed, smiling eye: ^
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(-14, -68.6, 2.4, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+  } else {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-14, -70, 2.2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-13.4, sad ? -69.2 : -70, 1.3, 0, TAU); ctx.fill();
+    if (sad) {
+      // heavy eyelid
+      ctx.fillStyle = shade(coat, -0.1);
+      ctx.beginPath(); ctx.arc(-14, -70, 2.5, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = '#2a1a12'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-17, -71); ctx.lineTo(-11.4, -70); ctx.stroke();
+    }
+  }
+  // a tear rolling down
+  if (sad && opts.tear != null) {
+    const k = opts.tear;
+    ctx.globalAlpha = k < 0.75 ? 1 : (1 - k) * 4;
+    ctx.fillStyle = '#5fb8ff'; ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 0.8;
+    const ty = -66 + k * 24, tx = -14.5 - k * 2;
+    ctx.beginPath(); ctx.moveTo(tx, ty - 5); ctx.quadraticCurveTo(tx + 3.6, ty, tx, ty + 2.6); ctx.quadraticCurveTo(tx - 3.6, ty, tx, ty - 5); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   // mane
   ctx.strokeStyle = mane; ctx.lineWidth = 5; ctx.lineJoin = 'round';
   const mw = run ? Math.sin(phase * 1.3) * 2.5 : 0;
   ctx.beginPath(); ctx.moveTo(-21, -80);
   ctx.lineTo(-29, -76 + mw); ctx.lineTo(-27, -72); ctx.lineTo(-37, -70 - mw); ctx.lineTo(-35, -66); ctx.lineTo(-46, -62 + mw);
   ctx.stroke();
+  ctx.restore();
   // saddle cloth with number
   ctx.fillStyle = silk.bg;
   ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1;
@@ -99,9 +188,9 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.fillStyle = silk.fg;
   ctx.font = 'bold 13px Fredoka, system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(String(lane + 1), -64, -50.5);
-  // jockey
-  const lean = run ? 0.15 * run : 0;
+  text(String(lane + 1), -64, -50.5);
+  // ---- jockey
+  const lean = sad ? 0.45 : run ? 0.15 * run : 0;
   ctx.save();
   ctx.translate(-62, -60);
   ctx.rotate(0.55 + lean);
@@ -122,22 +211,44 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   // sleeve stripe
   ctx.strokeStyle = silk.cap; ctx.lineWidth = 2.2;
   ctx.beginPath(); ctx.moveTo(-60, -76 + lean * 10); ctx.lineTo(-52, -74 + lean * 10); ctx.stroke();
-  // arm reaching to the reins
-  const armY = run ? Math.sin(phase) * 1.5 : 0;
+  const shoulderY = -76 + lean * 10;
   ctx.strokeStyle = silk.bg; ctx.lineWidth = 4.5;
-  ctx.beginPath(); ctx.moveTo(-52, -76 + lean * 10); ctx.lineTo(-36, -64 + armY); ctx.stroke();
-  ctx.fillStyle = '#f2c9a0'; ctx.beginPath(); ctx.arc(-35, -63.5 + armY, 2.4, 0, TAU); ctx.fill();
-  // reins
-  ctx.strokeStyle = 'rgba(40,20,10,.7)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(-35, -63 + armY); ctx.lineTo(-8, -62); ctx.stroke();
+  if (happy) {
+    // both arms up, waving
+    const w1 = Math.sin(phase * 3) * 3, w2 = Math.sin(phase * 3 + 2) * 3;
+    ctx.beginPath(); ctx.moveTo(-53, shoulderY); ctx.lineTo(-60 + w1, shoulderY - 18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-50, shoulderY); ctx.lineTo(-41 + w2, shoulderY - 17); ctx.stroke();
+    ctx.fillStyle = '#f2c9a0';
+    ctx.beginPath(); ctx.arc(-60 + w1, shoulderY - 19, 2.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(-41 + w2, shoulderY - 18, 2.6, 0, TAU); ctx.fill();
+  } else if (sad) {
+    // arms hanging limp
+    ctx.beginPath(); ctx.moveTo(-50, shoulderY); ctx.lineTo(-46, shoulderY + 14); ctx.stroke();
+    ctx.fillStyle = '#f2c9a0'; ctx.beginPath(); ctx.arc(-46, shoulderY + 15, 2.4, 0, TAU); ctx.fill();
+  } else {
+    // arm reaching to the reins
+    const armY = run ? Math.sin(phase) * 1.5 : 0;
+    ctx.beginPath(); ctx.moveTo(-52, shoulderY); ctx.lineTo(-36, -64 + armY); ctx.stroke();
+    ctx.fillStyle = '#f2c9a0'; ctx.beginPath(); ctx.arc(-35, -63.5 + armY, 2.4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,20,10,.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-35, -63 + armY); ctx.lineTo(-8, -62); ctx.stroke();
+  }
   // head + helmet
-  const hx = -50, hy = -87 + lean * 12;
+  const hx = -50 + (sad ? 3 : 0), hy = -87 + lean * 12;
   ctx.fillStyle = '#f2c9a0'; ctx.beginPath(); ctx.arc(hx + 1.5, hy + 2, 4.6, 0, TAU); ctx.fill();
   ctx.fillStyle = silk.cap;
   ctx.beginPath(); ctx.arc(hx, hy, 5.6, Math.PI, 0); ctx.fill();
   ctx.fillRect(hx, hy - 1.2, 8.5, 2.4); // peak
   ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(hx, hy, 5.6, Math.PI, 0); ctx.stroke();
+  // the trophy, held up in the front hooves and kept upright
+  if (rear && opts.trophy && hoofUp) {
+    ctx.save();
+    ctx.translate(hoofUp[0], hoofUp[1]);
+    ctx.rotate(REAR);
+    drawTrophy(ctx, 0, 2, 1.25);
+    ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -208,10 +319,16 @@ export class TrackView {
     const G = race.gates || 20;   // gates on this track; the last one is the finish line
     const horsePx = laneH * 1.2;
     const sc = (laneH * 0.92) / 92;
+    // a horse over the line keeps galloping, faster and faster, off the right of the screen
+    const runOff = (i, at) => { const d = at - race.fin[i]; return G + d * (3 + 6 * d); };
+    const over = i => race.fin[i] >= 0 && t > race.fin[i];
+    const shown = pos.map((p, i) => (over(i) ? runOff(i, t) : p));
+    const shownPrev = prev.map((p, i) => (race.fin[i] >= 0 && t - 0.08 > race.fin[i] ? runOff(i, t - 0.08) : p));
 
-    // ---- camera: keep the whole pack in view, zoomed in as far as possible
+    // ---- camera: keep the horses still racing in view, zoomed in as far as possible
     let min = Infinity, max = -Infinity;
-    for (const p of pos) { if (p < min) min = p; if (p > max) max = p; }
+    for (let i = 0; i < pos.length; i++) { if (over(i)) continue; const p = pos[i]; if (p < min) min = p; if (p > max) max = p; }
+    if (min === Infinity) { min = G - 1; max = G; }   // everyone's home: hold on the finish line
     max = Math.min(max, G + 0.3);
     const marginL = 18, marginR = Math.max(26, W * 0.08);
     const ppgMax = W / 5.2, ppgMin = (W - horsePx - marginL - marginR) / (G + 0.6);
@@ -350,17 +467,17 @@ export class TrackView {
     }
     // ---- horses
     for (let i = 0; i < n; i++) {
-      const v = (pos[i] - prev[i]) / 0.08;
-      // between hops the horses trot on the spot; mid-hop they're at full gallop
-      const finished = race.fin[i] >= 0 && t >= race.fin[i];
+      const v = (shown[i] - shownPrev[i]) / 0.08;
+      // between hops the horses trot on the spot; mid-hop (or galloping off after the finish) at full gallop
+      const finished = over(i);
       const live = t > 0 && !ev && !finished;
-      const run = Math.max(live ? 0.3 : 0, Math.min(1, Math.abs(v) / 0.6));
+      const run = finished ? 1 : Math.max(live ? 0.3 : 0, Math.min(1, Math.abs(v) / 0.6));
       this.phase[i] = (this.phase[i] || i * 1.7) + (dt > 0 && dt < 0.5 ? dt * (5 + 9 * Math.min(1.6, Math.abs(v))) * (run > 0.05 ? 1 : 0) : 0);
       // each hop (and each boost/setback) is a little leap: an arc off the ground
       const frac = pos[i] - Math.floor(pos[i]);
-      const lift = frac > 0.001 && frac < 0.999 ? Math.sin(frac * Math.PI) * 22 : 0;
-      const x = X(pos[i]), y = laneTop(i) + laneH - 5;
-      if (x < -horsePx || x > W + horsePx * 2) continue;
+      const lift = !finished && frac > 0.001 && frac < 0.999 ? Math.sin(frac * Math.PI) * 22 : 0;
+      const x = X(shown[i]), y = laneTop(i) + laneH - 5;
+      if (x < -horsePx || x > W + horsePx + 170) continue;   // (the name tag trails up to ~160px behind)
       // boost / setback effects
       if (ev) {
         if (i === ev.ev.boost && ev.pt >= BOOST_AT - 0.05 && ev.pt < BOOST_AT + BOOST_LEN + 0.5) {

@@ -12,7 +12,7 @@ for (const [g, want] of [[3, 1], [7, 3], [10, 3], [20, 6], [21, 7], [50, 15], [1
 }
 for (const gates of gateList) {
   const cap = effectCap(gates);
-  for (const n of [4, 6]) {
+  for (const n of [2, 4, 6, 8]) {
     const runs = gates >= 50 ? Math.ceil(N / 5) : N;
     const dur = [], evs = [], wins = new Array(n).fill(0); let boostWins = 0, maxB = 0, maxS = 0, capped = 0, skipped = 0;
     for (let k = 0; k < runs; k++) {

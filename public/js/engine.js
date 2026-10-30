@@ -3,17 +3,23 @@
 import { NAMES } from './names.js';
 import { simulate, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
 
-export const PROTO = 4;               // bump when the message format, rules or race simulation change
+export const PROTO = 5;               // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
 export const MAX_BET = 20;
 export const PENALTY_MULT = 2;        // winners dish out 2x their bet in penalties
 export const MAX_PLAYERS = 16;
-export const MIN_HORSES = 4;
-export const MAX_HORSES = 6;
+// The host picks how many horses run (2 to 8), or leaves it on random, which deals 4 to 6 each race.
+export const MIN_HORSES = 2;
+export const MAX_HORSES = 8;
+export const RANDOM_MIN = 4;
+export const RANDOM_MAX = 6;
+/** The lobby's horse setting: 0 = random 4-6, otherwise the exact number. */
+export const horseSetting = s => s.horseCount || 0;
 
-// Saddle cloth / silks colours by lane, the classic racing set: 1 red, 2 white, 3 blue, 4 yellow, 5 green, 6 black.
+// Saddle cloth / silks colours by lane, the classic racing set:
+// 1 red, 2 white, 3 blue, 4 yellow, 5 green, 6 black, 7 orange, 8 pink.
 export const SILKS = [
   { bg: '#d8312c', fg: '#ffffff', cap: '#ffffff' },
   { bg: '#f3efe6', fg: '#1d1d1d', cap: '#d8312c' },
@@ -21,6 +27,8 @@ export const SILKS = [
   { bg: '#f7d02c', fg: '#1d1d1d', cap: '#2a5bd7' },
   { bg: '#1f9a48', fg: '#ffffff', cap: '#ffffff' },
   { bg: '#1e1e22', fg: '#f7d02c', cap: '#f7d02c' },
+  { bg: '#f28a1d', fg: '#1d1d1d', cap: '#1e1e22' },
+  { bg: '#f48fb8', fg: '#1d1d1d', cap: '#1f9a48' },
 ];
 
 // Coat colours: [body, mane/tail]
@@ -92,9 +100,18 @@ export function setOnline(s, pid, on) {
   return true;
 }
 
-/** Fresh field of 4-6 horses with random funny names. */
+/** Next race: a fresh field of horses with random funny names. */
 export function newRace(s, rand = Math.random) {
-  const n = MIN_HORSES + Math.floor(rand() * (MAX_HORSES - MIN_HORSES + 1));
+  dealHorses(s, rand);
+  s.raceNo++;
+  s.phase = 'betting';
+  s.race = null;
+  s.res = null;
+}
+
+/** Deal the horses for this race (as many as the host chose, or 4-6 at random). Clears everyone's picks. */
+export function dealHorses(s, rand = Math.random) {
+  const n = horseSetting(s) || RANDOM_MIN + Math.floor(rand() * (RANDOM_MAX - RANDOM_MIN + 1));
   const recent = new Set(s.recent);
   const pool = shuffle(NAMES.filter(x => !recent.has(x)), rand);
   const coats = shuffle(COATS.map((c, i) => i), rand);
@@ -102,12 +119,8 @@ export function newRace(s, rand = Math.random) {
   for (let i = 0; i < n; i++) {
     s.horses.push({ name: pool[i], orig: pool[i], coat: coats[i % coats.length], by: null });
   }
-  s.recent = [...s.recent, ...s.horses.map(h => h.name)].slice(-60);
-  s.raceNo++;
-  s.phase = 'betting';
+  s.recent = [...(s.recent || []), ...s.horses.map(h => h.name)].slice(-60);
   s.picks = {};
-  s.race = null;
-  s.res = null;
 }
 
 /** pid of the person allowed to rename horse h: whoever picked it first (of the people still on it). */
@@ -180,10 +193,21 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       const gates = gatesOf(s);
       const sim = simulate(seed, s.horses.length, gates);
       const startAt = now + COUNTDOWN * 1000;
-      s.race = { seed, n: s.horses.length, gates, startAt, endsAt: startAt + Math.ceil((sim.endT + 1.5) * 1000), winner: sim.winner, order: sim.order };
+      s.race = { seed, n: s.horses.length, gates, startAt, endsAt: startAt + Math.ceil((sim.endT + 1) * 1000), winner: sim.winner, order: sim.order };
       s.phase = 'racing';
       const bettors = Object.keys(s.picks).length;
       log(s, `Race ${s.raceNo} is off! ${gates} gates, ${bettors} ${bettors === 1 ? 'bet' : 'bets'} placed`);
+      return { ok: true };
+    }
+    case 'horses': {
+      if (!isHost) return { ok: false, err: 'Only the host can change how many horses run' };
+      if (s.phase !== 'betting') return { ok: false, err: 'You can change the horses between races' };
+      const n = int(a.n);
+      if (!(n === 0 || (n >= MIN_HORSES && n <= MAX_HORSES))) return { ok: false, err: `Races have ${MIN_HORSES} to ${MAX_HORSES} horses` };
+      if (n === horseSetting(s) && (n === 0 || s.horses.length === n)) return { ok: true };
+      s.horseCount = n;
+      dealHorses(s, rand);   // a new field for this race, so everyone picks again
+      log(s, n ? `${me.name} set the field to ${n} horses (new horses, pick again)` : `${me.name} set the field to random (4 to 6 horses)`);
       return { ok: true };
     }
     case 'gates': {

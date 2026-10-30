@@ -16,6 +16,26 @@ ok(!E.apply(s, 'A', { k: 'rename', h: 0, name: 'Nope' }).ok, 'second picker cann
 ok(E.apply(s, 'B', { k: 'rename', h: 0, name: 'Glue Stick' }).ok && s.horses[0].name === 'Glue Stick', 'owner renames');
 ok(E.apply(s, 'B', { k: 'bet', bet: 7 }).ok && E.ownerOf(s, 0) === 'B', 'changing bet keeps ownership');
 ok(E.apply(s, 'C', { k: 'pick', h: 1, bet: 3 }).ok, 'C picks 1');
+// number of horses
+{
+  const t = E.newRoom('22222', { pid: 'H', name: 'Hal' }, 1000);
+  E.addPlayer(t, { pid: 'G', name: 'Gil' });
+  ok(t.horses.length >= 4 && t.horses.length <= 6, 'random field is 4-6 horses');
+  E.apply(t, 'G', { k: 'pick', h: 0, bet: 3 });
+  ok(!E.apply(t, 'G', { k: 'horses', n: 8 }).ok, 'only the host picks the number of horses');
+  ok(!E.apply(t, 'H', { k: 'horses', n: 1 }).ok && !E.apply(t, 'H', { k: 'horses', n: 9 }).ok, 'fields are 2 to 8 horses');
+  ok(E.apply(t, 'H', { k: 'horses', n: 8 }).ok && t.horses.length === 8 && !Object.keys(t.picks).length, '8 horses: new field, picks cleared');
+  ok(new Set(t.horses.map(h => h.coat)).size === 8 && E.SILKS.length >= 8, '8 horses all look different');
+  E.apply(t, 'H', { k: 'next' }); // not in results: refused, field stays
+  ok(t.horses.length === 8, 'field size sticks');
+  ok(E.apply(t, 'H', { k: 'horses', n: 2 }).ok && t.horses.length === 2, '2 horses');
+  E.apply(t, 'G', { k: 'pick', h: 1, bet: 5 });
+  ok(E.apply(t, 'H', { k: 'start' }, 2000).ok && t.race.n === 2, 'a 2-horse race starts');
+  ok(!E.apply(t, 'H', { k: 'horses', n: 5 }).ok, 'no field changes mid-race');
+  E.tick(t, t.race.endsAt);
+  ok(E.apply(t, 'H', { k: 'next' }).ok && t.horses.length === 2, 'next race keeps 2 horses');
+  ok(E.apply(t, 'H', { k: 'horses', n: 0 }).ok && t.horses.length >= 4 && t.horses.length <= 6, 'back to random');
+}
 // track length
 ok(E.gatesOf(s) === 20, 'tracks start with 20 gates');
 ok(!E.apply(s, 'B', { k: 'gates', n: 7 }).ok, 'only the host changes the track');

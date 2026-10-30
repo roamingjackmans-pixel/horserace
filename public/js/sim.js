@@ -69,6 +69,7 @@ export function simulate(seed, n, gates = DEFAULT_GATES, tune = {}) {
   const maxSteps = Math.ceil((60 + GATES * 6) / DT);   // far more time than any race needs
   const frames = new Float32Array(maxSteps * n);
   const events = [];
+  const clears = [];   // when each gate was cleared by every horse (a stop can be skipped; this can't)
   let t = 0, step = 0, nextGate = 1, pause = null, winner = -1, winT = 0;
 
   const record = () => { for (let i = 0; i < n; i++) frames[step * n + i] = H[i].pos; step++; };
@@ -111,40 +112,48 @@ export function simulate(seed, n, gates = DEFAULT_GATES, tune = {}) {
         }
       }
     } else {
-      // hops: land the ones in the air, start new ones when a horse's wait is up
-      // (no new hops while everyone is through the next gate and we're about to stop)
+      // Each step is done in passes so that no horse gets an edge from where it sits in the list:
+      // 1) land the hops that are due, and move the ones still in the air
+      for (let i = 0; i < n; i++) {
+        const h = H[i];
+        if (h.fin >= 0 || !h.jump) continue;           // (over the line: stands there)
+        const k = (t - h.jump.start) / JUMP_LEN;
+        if (k >= 1) {
+          const land = h.jump.start + JUMP_LEN;
+          h.pos = h.jump.from + 1; h.jump = null; h.at = land;
+          h.next = land + wait();
+          if (h.pos >= GATES) finish(i, land);
+        } else {
+          h.pos = h.jump.from + ease(k);
+        }
+      }
+      // 2) is everyone through the next gate? (a horse in the air counts from where it took off)
       let minLanded = Infinity;
       for (const h of H) { const p = h.jump ? h.jump.from : h.pos; if (p < minLanded) minLanded = p; }
       const stopping = winner < 0 && nextGate < GATES && minLanded >= nextGate;
-      for (let i = 0; i < n; i++) {
-        const h = H[i];
-        if (h.fin >= 0) continue;                       // over the line: stands there
-        if (h.jump) {
-          const k = (t - h.jump.start) / JUMP_LEN;
-          if (k >= 1) {
-            const land = h.jump.start + JUMP_LEN;
-            h.pos = h.jump.from + 1; h.jump = null; h.at = land;
-            h.next = land + wait();
-            if (h.pos >= GATES) finish(i, land);
-          } else {
-            h.pos = h.jump.from + ease(k);
-          }
-        }
-        if (!h.jump && h.fin < 0 && !stopping && t >= h.next) {
+      // 3) start new hops for horses whose wait is up (none while we're about to stop)
+      if (!stopping) {
+        for (let i = 0; i < n; i++) {
+          const h = H[i];
+          if (h.fin >= 0 || h.jump || t < h.next) continue;
           h.jump = { start: h.next, from: h.pos };
           h.pos = h.jump.from + ease((t - h.jump.start) / JUMP_LEN);
         }
       }
-      // everyone through the next gate for the first time (and nobody mid-air)? Freeze!
+      // 4) everyone through the next gate for the first time, and nobody mid-air: freeze!
       if (stopping && H.every(h => !h.jump)) {
+        clears.push({ t, gate: nextGate });
         // only horses that haven't hit their limit can be picked
         const all = H.map((h, i) => i);
         const boost = pickFrom(all.filter(i => H[i].boosts < cap));
         const setback = pickFrom(all.filter(i => i !== boost && H[i].setbacks < cap));
         if (boost >= 0) H[boost].boosts++;
         if (setback >= 0) H[setback].setbacks++;
-        pause = { t0: t, from: H.map(h => h.pos), boost, setback };
-        events.push({ t, gate: nextGate, boost, setback });
+        // if every horse is already at its cap there's nothing to do here, so don't stop at all
+        if (boost >= 0 || setback >= 0) {
+          pause = { t0: t, from: H.map(h => h.pos), boost, setback };
+          events.push({ t, gate: nextGate, boost, setback });
+        }
         nextGate++;
       }
     }
@@ -163,7 +172,7 @@ export function simulate(seed, n, gates = DEFAULT_GATES, tune = {}) {
     if (fb >= 0) return 1;
     return H[b].pos - H[a].pos || H[a].at - H[b].at || a - b;
   });
-  return { n, gates: GATES, cap, steps: step, frames, events, winner, order, fin: H.map(h => h.fin), endT };
+  return { n, gates: GATES, cap, steps: step, frames, events, clears, winner, order, fin: H.map(h => h.fin), endT };
 }
 
 /** Position of every horse at time `t` (seconds since the gates opened), smoothly interpolated. */
@@ -191,6 +200,6 @@ export function eventAt(race, t) {
 /** How many gate events have started by time t (gates every horse has cleared). */
 export function gatesClearedAt(race, t) {
   let c = 0;
-  for (const ev of race.events) { if (ev.t <= t) c = ev.gate; else break; }
+  for (const ev of race.clears || race.events) { if (ev.t <= t) c = ev.gate; else break; }
   return c;
 }

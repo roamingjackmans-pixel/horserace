@@ -5,6 +5,7 @@ import * as E from './engine.js';
 import { simulate, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, eventAt, gatesClearedAt } from './sim.js';
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
+import { PodiumView } from './podium.js';
 import { sfx, unlock, isMuted, setMuted } from './audio.js';
 
 const $ = sel => document.querySelector(sel);
@@ -315,8 +316,8 @@ function render() {
   if (!s || !ui.room) return;
   renderPlayers(s);
   renderLog(s);
-  if (s.phase === 'betting') { stopRace(); renderBetting(s); }
-  else if (s.phase === 'racing') renderRace(s);
+  if (s.phase === 'betting') { stopRace(); stopPodium(); renderBetting(s); }
+  else if (s.phase === 'racing') { stopPodium(); renderRace(s); }
   else if (s.phase === 'results') { stopRace(); renderResults(s); }
 }
 
@@ -403,17 +404,27 @@ function renderBetting(s) {
   const pid = myPid(), isHost = s.hostPid === pid, mine = s.picks[pid];
   const online = s.order.filter(id => s.players[id] && s.players[id].on);
   const G = E.gatesOf(s), cap = effectCap(G);
-  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, s.order.map(id => s.players[id] && s.players[id].name)]);
+  const hset = E.horseSetting(s), hn = s.horses.length;   // 0 = random 4-6
+  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, hset, s.order.map(id => s.players[id] && s.players[id].name)]);
   if (key === ui.stageKey) return;
   ui.stageKey = key;
   const presets = [[7, 'Quick'], [20, 'Classic'], [50, 'Long'], [100, 'Marathon']];
   const track = `<div class="trackbar">
-      <span class="label">🏁 Track</span>
-      ${isHost
+      <div class="setrow">
+        <span class="label">🏁 Track</span>
+        ${isHost
       ? `<div class="stepper"><button data-gstep="-1" aria-label="Fewer gates" ${G <= MIN_GATES ? 'disabled' : ''}>−</button><input id="gatesInput" type="number" inputmode="numeric" min="${MIN_GATES}" max="${MAX_GATES}" value="${G}" aria-label="Number of gates"><button data-gstep="1" aria-label="More gates" ${G >= MAX_GATES ? 'disabled' : ''}>+</button></div><span class="gunit">gates</span>
-         <div class="quick presets">${presets.map(([n, name]) => `<button data-gates="${n}" class="${G === n ? 'on' : ''}">${name} ${n}</button>`).join('')}</div>`
+           <div class="quick presets">${presets.map(([n, name]) => `<button data-gates="${n}" class="${G === n ? 'on' : ''}">${name} ${n}</button>`).join('')}</div>`
       : `<b class="gcount">${G} gates</b>`}
-      <div class="track-note">Max <b>${cap} boosts</b> and <b>${cap} setbacks</b> per horse (30% of the gates) · races take ${raceLength(G)}${isHost ? '' : ` · ${esc(pname(s, s.hostPid))} picks the track`}</div>
+      </div>
+      <div class="setrow">
+        <span class="label">🐴 Horses</span>
+        ${isHost
+      ? `<div class="stepper"><button data-hstep="-1" aria-label="Fewer horses" ${hset && hn <= E.MIN_HORSES ? 'disabled' : ''}>−</button><div class="amt hcount">${hn}</div><button data-hstep="1" aria-label="More horses" ${hset && hn >= E.MAX_HORSES ? 'disabled' : ''}>+</button></div>
+           <div class="quick presets"><button data-hrandom class="${hset ? '' : 'on'}">🎲 Random ${E.RANDOM_MIN}–${E.RANDOM_MAX}</button></div>`
+      : `<b class="gcount">${hn} horses${hset ? '' : ' (random)'}</b>`}
+      </div>
+      <div class="track-note">Max <b>${cap} boosts</b> and <b>${cap} setbacks</b> per horse (30% of the gates) · races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
     </div>`;
   const cards = s.horses.map((h, i) => {
     const bs = E.backers(s, i);
@@ -498,6 +509,20 @@ function renderBetting(s) {
     gi.onkeydown = e => { if (e.key === 'Enter') gi.blur(); };
     gi.onblur = () => setGates(parseInt(gi.value, 10));   // also redraws if nothing changed
   }
+  // number of horses (host only). Deals a new field, so check first if anyone has already picked.
+  const setHorses = n => {
+    const st = ui.state;
+    const go = () => { sfx.click(); ui.room.act({ k: 'horses', n }); };
+    if (Object.keys(st.picks).length) {
+      confirmBox(n ? `Race with ${n} horses?` : 'Random number of horses?', "That deals a new set of horses, so everyone's picks and renames are cleared and they pick again.", 'Deal new horses', 'Cancel', go);
+    } else go();
+  };
+  $('#stage').querySelectorAll('[data-hstep]').forEach(b => b.onclick = () => {
+    const n = Math.max(E.MIN_HORSES, Math.min(E.MAX_HORSES, ui.state.horses.length + +b.dataset.hstep));
+    if (n !== ui.state.horses.length || !E.horseSetting(ui.state)) setHorses(n);
+  });
+  const hr = $('#stage [data-hrandom]');
+  if (hr) hr.onclick = () => setHorses(0);
   const start = $('#stage [data-start]');
   if (start) start.onclick = () => {
     const st = ui.state;
@@ -678,14 +703,49 @@ function updateStandings(force) {
 }
 
 // ---------------------------------------------------------------- results + penalties
+// The podium scene at the top of the results keeps animating on its own; only the part below it is redrawn.
+function startPodium(s) {
+  const key = `${s.code}:${s.raceNo}:${s.race ? s.race.seed : ''}`;
+  if (!ui.podium || ui.podium.key !== key) ui.podium = { key, start: performance.now(), cheered: false };
+  const view = new PodiumView($('#podium'));
+  view.burst = (performance.now() - ui.podium.start) / 1000 > 1.5;   // redrawn later: no second confetti burst
+  ui.podium.view = view;
+  if (ui.podiumRaf) return;
+  const frame = () => {
+    ui.podiumRaf = requestAnimationFrame(frame);
+    const st = ui.state, P = ui.podium;
+    if (!st || st.phase !== 'results' || !st.res || !P || !P.view || !document.contains(P.view.c)) return;
+    const t = (performance.now() - P.start) / 1000;
+    if (t >= 1 && !P.cheered) { P.cheered = true; if (t < 3) sfx.win(); }   // the winner lands on the podium
+    try { P.view.draw(t, st.horses, st.res.order); } catch (e) { console.error(e); }
+  };
+  ui.podiumRaf = requestAnimationFrame(frame);
+}
+function stopPodium() {
+  if (ui.podiumRaf) cancelAnimationFrame(ui.podiumRaf);
+  ui.podiumRaf = 0;
+}
+
 function renderResults(s) {
   const res = s.res;
   if (!res) return;
   const pid = myPid(), isHost = s.hostPid === pid;
-  const key = JSON.stringify(['res', s.raceNo, res, s.hostPid, pid, ui.draft, s.order, s.order.map(id => s.players[id] && [s.players[id].name, s.players[id].on])]);
+  const w = res.winner, wh = s.horses[w];
+  // the frame with the podium: built once per race
+  const shell = `res:${s.code}:${s.raceNo}`;
+  if (ui.resShell !== shell || !$('#podium')) {
+    ui.resShell = shell;
+    ui.stageKey = '';
+    $('#stage').innerHTML = `<div class="card panel">
+      <div class="phase-head"><h2>Race ${s.raceNo} results</h2><span class="sub" id="resHeadline"></span></div>
+      <div class="podium-box"><canvas id="podium"></canvas><div class="podium-title" id="podiumTitle"></div></div>
+      <div id="resBody"></div>
+    </div>`;
+    startPodium(s);
+  }
+  const key = JSON.stringify(['res', s.raceNo, res, s.hostPid, pid, ui.draft, s.order, s.horses.map(h => h.name), s.order.map(id => s.players[id] && [s.players[id].name, s.players[id].on])]);
   if (key === ui.stageKey) return;
   ui.stageKey = key;
-  const w = res.winner, wh = s.horses[w];
   const winners = res.payouts.filter(p => p.win);
   const minePo = res.payouts.find(p => p.pid === pid);
   let headline;
@@ -731,23 +791,22 @@ function renderResults(s) {
     return `<div class="attack-line ${hitMe ? 'me' : ''}">${esc(pav(s, a.from))} <b>${esc(pname(s, a.from))}</b> ${a.total ? `attacked ${list}` : 'showed mercy'}</div>`;
   }).join('')}</div>` : '';
 
-  $('#stage').innerHTML = `<div class="card panel">
-    <div class="phase-head"><h2>Race ${s.raceNo} results</h2><span class="sub">${esc(headline)}</span></div>
-    <div class="winner-box"><canvas id="winnerArt"></canvas><div class="wtext"><h2>🏆 #${w + 1} ${esc(wh.name)} wins!</h2><p>${backedBy}</p></div></div>
+  $('#resHeadline').textContent = headline;
+  $('#podiumTitle').textContent = `🏆 #${w + 1} ${wh.name} wins!`;
+  $('#resBody').innerHTML = `
+    <p class="backed">${backedBy}</p>
+    <div class="host-row next-row">
+      ${isHost ? `<button class="btn primary big-next" data-next>Next race ▶</button>${pending.length || (pool && !res.done[pid]) ? '<span class="note">Winners are still handing out penalties</span>' : ''}` : `<div class="waiting">${esc(pname(s, s.hostPid))} will start the next race.</div>`}
+    </div>
     ${panel}
     ${attacks}
     ${waiting}
     <div class="res-grid">
       <div class="res-block"><h3>Finishing order</h3><ol class="order">${order}</ol></div>
       <div class="res-block"><h3>Bets</h3><div class="payouts">${payouts}</div></div>
-    </div>
-    <div class="host-row">
-      ${isHost ? `<button class="btn primary" data-next>Next race ▶</button>${pending.length || (pool && !res.done[pid]) ? '<span class="note">Winners are still handing out penalties</span>' : ''}` : `<div class="waiting">${esc(pname(s, s.hostPid))} will start the next race.</div>`}
-    </div>
-  </div>`;
-  paintPortrait($('#winnerArt'), w, wh.coat, { run: 1, phase: 2.2 });
+    </div>`;
 
-  const stage = $('#stage');
+  const stage = $('#resBody');
   stage.querySelectorAll('[data-pen]').forEach(b => b.onclick = () => {
     const id = b.dataset.pen, d = +b.dataset.d;
     const used = Object.values(ui.draft).reduce((a, x) => a + x, 0);

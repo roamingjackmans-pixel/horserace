@@ -221,6 +221,9 @@ input:focus { border-color: var(--gold); }
 .trackbar .presets { flex-wrap: wrap; }
 .trackbar .presets button { font-size: 14px; }
 .track-note { flex: 1 1 100%; font-size: 13.5px; color: #4f6b57; }
+.trackbar .setrow { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.trackbar .setrow .label { min-width: 78px; }
+.trackbar .hcount { min-width: 48px; font-size: 22px; }
 .betbar {
   margin-top: 16px; padding: 14px; border-radius: 16px; background: var(--card-2);
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
@@ -281,11 +284,20 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--red); flex: 1 1 1
 .gate-info { font-weight: 600; color: var(--muted); }
 
 /* results */
-.winner-box { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px; border-radius: 18px; background: linear-gradient(135deg, #fff3c2, #ffe08a); }
-.winner-box canvas { width: 180px; height: 120px; flex: 0 0 auto; }
-.winner-box .wtext { flex: 1 1 220px; }
-.winner-box h2 { margin: 0 0 4px; font-size: 26px; line-height: 1.15; }
-.winner-box p { margin: 0; color: #5c4a1c; }
+/* the podium scene: winner up top with the trophy, everyone else sad at the bottom */
+.podium-box { position: relative; border-radius: 18px; overflow: hidden; background: #121a42; margin: 6px 0 10px; box-shadow: inset 0 0 0 3px rgba(255, 213, 74, .5); }
+.podium-box canvas { display: block; width: 100%; }
+.podium-title {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  max-width: 94%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 4px 16px; border-radius: 999px; background: rgba(10, 12, 30, .55);
+  color: #ffe27a; font-weight: 700; font-size: 22px; text-shadow: 0 2px 0 rgba(0, 0, 0, .5);
+  animation: title-in .6s ease-out;
+}
+@keyframes title-in { from { transform: translate(-50%, -24px); opacity: 0; } }
+.backed { margin: 4px 2px 0; color: #5c4a1c; }
+.next-row { margin-top: 10px; }
+.big-next { font-size: 20px; padding: 12px 30px; }
 .res-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
 .res-block { background: var(--card-2); border-radius: 16px; padding: 12px 14px; }
 .res-block h3 { margin: 0 0 8px; font-size: 17px; }
@@ -360,8 +372,8 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--red); flex: 1 1 1
   .horse-card .num { min-width: 27px; height: 27px; font-size: 16px; top: 8px; left: 8px; }
   .hname { font-size: 15.5px; }
   .res-grid { grid-template-columns: 1fr; }
-  .winner-box canvas { width: 140px; height: 94px; }
-  .winner-box h2 { font-size: 22px; }
+  .podium-title { font-size: 16px; top: 8px; padding: 3px 12px; }
+  .big-next { width: 100%; }
   .standings { grid-template-columns: 1fr; }
   .banner { font-size: 13.5px; padding: 4px 10px; gap: 0 10px; top: 20px; flex-wrap: nowrap; white-space: nowrap; }
   .banner .big { font-size: 13.5px; }
