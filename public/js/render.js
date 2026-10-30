@@ -1,5 +1,5 @@
 // Drawing: the cartoon horses and the race track. Pure canvas, no images.
-import { GATES, PAUSE, BOOST_AT, BOOST_LEN, SETBACK_AT, SETBACK_LEN, positionsAt, eventAt, gatesClearedAt } from './sim.js';
+import { PAUSE, BOOST_AT, BOOST_LEN, SETBACK_AT, SETBACK_LEN, positionsAt, eventAt, gatesClearedAt } from './sim.js';
 import { SILKS, COATS } from './engine.js';
 
 const TAU = Math.PI * 2;
@@ -202,19 +202,20 @@ export class TrackView {
     const prev = positionsAt(race, t - 0.08);
     const ev = eventAt(race, t);
     const cleared = gatesClearedAt(race, t);
+    const G = race.gates || 20;   // gates on this track; the last one is the finish line
     const horsePx = laneH * 1.2;
     const sc = (laneH * 0.92) / 92;
 
     // ---- camera: keep the whole pack in view, zoomed in as far as possible
     let min = Infinity, max = -Infinity;
     for (const p of pos) { if (p < min) min = p; if (p > max) max = p; }
-    max = Math.min(max, GATES + 0.3);
+    max = Math.min(max, G + 0.3);
     const marginL = 18, marginR = Math.max(26, W * 0.08);
-    const ppgMax = W / 5.2, ppgMin = (W - horsePx - marginL - marginR) / (GATES + 0.6);
+    const ppgMax = W / 5.2, ppgMin = (W - horsePx - marginL - marginR) / (G + 0.6);
     let ppg = (W - horsePx - marginL - marginR) / Math.max(0.01, max - min + 0.9);
     ppg = Math.max(ppgMin, Math.min(ppgMax, ppg));
     let left = min - (horsePx + marginL) / ppg;
-    const maxLeft = GATES + 0.9 - W / ppg;
+    const maxLeft = G + 0.9 - W / ppg;
     if (left > maxLeft) left = maxLeft;
     if (!this.cam || dt > 1) this.cam = { ppg, left };
     else {
@@ -292,11 +293,11 @@ export class TrackView {
       }
     }
     // ---- gates
-    for (let g = 1; g <= GATES; g++) {
+    for (let g = 1; g <= G; g++) {
       const x = X(g);
       if (x < -20 || x > W + 20) continue;
       const top = skyH + 7, bot = H - 12;
-      if (g === GATES) {
+      if (g === G) {
         // finish line: checkered strip
         const sq = 5;
         for (let y = top, r = 0; y < bot; y += sq, r++) {
@@ -318,8 +319,11 @@ export class TrackView {
       let bg = '#ffffff', fg = '#2a2118';
       if (done) { bg = '#ffd23f'; fg = '#2a2118'; }
       if (next) { const p = 0.5 + 0.5 * Math.sin(t * 6); bg = `rgb(255,${Math.round(150 + 60 * p)},${Math.round(60 * p)})`; fg = '#2a2118'; }
-      if (ev && ev.ev.gate === g && ev.pt < PAUSE) { bg = '#ff5a36'; fg = '#fff'; }
-      flag(ctx, x, top - 16, String(g), bg, fg);
+      const eventGate = ev && ev.ev.gate === g && ev.pt < PAUSE;
+      if (eventGate) { bg = '#ff5a36'; fg = '#fff'; }
+      // zoomed far out on a long track the number flags would pile up: label every 5th or 10th gate
+      const every = cam.ppg < 14 ? 10 : cam.ppg < 26 ? 5 : 1;
+      if (g % every === 0 || next || eventGate) flag(ctx, x, top - 16, String(g), bg, fg);
     }
     // ---- starting stalls (closed during the countdown, then swing open and fade)
     if (t < 1.6) {
@@ -406,7 +410,7 @@ export class TrackView {
       if (t >= wt && !this.confettiFor) {
         this.confettiFor = true;
         for (let k = 0; k < 140; k++) {
-          this.confetti.push({ x: X(GATES) + (Math.random() - 0.5) * 40, y: skyH + Math.random() * 20, vx: (Math.random() - 0.5) * 260, vy: -Math.random() * 260 - 60, c: CROWD[k % CROWD.length], r: Math.random() * TAU, life: 2.8 });
+          this.confetti.push({ x: X(G) + (Math.random() - 0.5) * 40, y: skyH + Math.random() * 20, vx: (Math.random() - 0.5) * 260, vy: -Math.random() * 260 - 60, c: CROWD[k % CROWD.length], r: Math.random() * TAU, life: 2.8 });
         }
       }
       if (t < wt) this.confettiFor = false;
@@ -426,17 +430,21 @@ export class TrackView {
     // ---- mini map of the whole course
     const mmW = Math.min(W - 24, 420), mmX = (W - mmW) / 2, mmY = 5, mmH = 12;
     ctx.fillStyle = 'rgba(20,30,40,.55)'; roundRect(ctx, mmX - 6, mmY - 3, mmW + 12, mmH + 6, 8); ctx.fill();
-    for (let g = 0; g <= GATES; g++) {
-      const gx = mmX + (g / GATES) * mmW;
-      ctx.fillStyle = g === GATES ? '#fff' : g <= cleared && g > 0 ? '#ffd23f' : 'rgba(255,255,255,.45)';
-      ctx.fillRect(gx - 0.5, mmY + (g === GATES ? 0 : 3), g === GATES ? 2 : 1, g === GATES ? mmH : mmH - 6);
+    // cleared stretch as a gold bar, plus a tick per gate (every 5th on long tracks)
+    if (cleared > 0) { ctx.fillStyle = 'rgba(255,210,63,.35)'; ctx.fillRect(mmX, mmY + 3, (cleared / G) * mmW, mmH - 6); }
+    const tickEvery = mmW / G < 5 ? 5 : 1;
+    for (let g = 0; g <= G; g++) {
+      if (g !== G && g % tickEvery) continue;
+      const gx = mmX + (g / G) * mmW;
+      ctx.fillStyle = g === G ? '#fff' : g <= cleared && g > 0 ? '#ffd23f' : 'rgba(255,255,255,.45)';
+      ctx.fillRect(gx - 0.5, mmY + (g === G ? 0 : 3), g === G ? 2 : 1, g === G ? mmH : mmH - 6);
     }
     // the visible window
     ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1;
-    const vx0 = mmX + Math.max(0, cam.left / GATES) * mmW, vx1 = mmX + Math.min(1.03, (cam.left + W / cam.ppg) / GATES) * mmW;
+    const vx0 = mmX + Math.max(0, cam.left / G) * mmW, vx1 = mmX + Math.min(1.03, (cam.left + W / cam.ppg) / G) * mmW;
     ctx.strokeRect(vx0, mmY - 1, Math.max(4, vx1 - vx0), mmH + 2);
     for (let i = n - 1; i >= 0; i--) {
-      const gx = mmX + Math.min(1.02, Math.max(0, pos[i] / GATES)) * mmW;
+      const gx = mmX + Math.min(1.02, Math.max(0, pos[i] / G)) * mmW;
       ctx.fillStyle = SILKS[i].bg; ctx.strokeStyle = i === this.myLane ? '#ffd23f' : 'rgba(0,0,0,.6)'; ctx.lineWidth = i === this.myLane ? 2 : 1;
       ctx.beginPath(); ctx.arc(gx, mmY + mmH / 2, 4, 0, TAU); ctx.fill(); ctx.stroke();
     }

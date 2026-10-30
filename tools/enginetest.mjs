@@ -16,9 +16,16 @@ ok(!E.apply(s, 'A', { k: 'rename', h: 0, name: 'Nope' }).ok, 'second picker cann
 ok(E.apply(s, 'B', { k: 'rename', h: 0, name: 'Glue Stick' }).ok && s.horses[0].name === 'Glue Stick', 'owner renames');
 ok(E.apply(s, 'B', { k: 'bet', bet: 7 }).ok && E.ownerOf(s, 0) === 'B', 'changing bet keeps ownership');
 ok(E.apply(s, 'C', { k: 'pick', h: 1, bet: 3 }).ok, 'C picks 1');
+// track length
+ok(E.gatesOf(s) === 20, 'tracks start with 20 gates');
+ok(!E.apply(s, 'B', { k: 'gates', n: 7 }).ok, 'only the host changes the track');
+ok(!E.apply(s, 'A', { k: 'gates', n: 2 }).ok && !E.apply(s, 'A', { k: 'gates', n: 101 }).ok, 'track is 3 to 100 gates');
+ok(E.apply(s, 'A', { k: 'gates', n: 7 }).ok && E.gatesOf(s) === 7, 'host sets 7 gates');
 ok(!E.apply(s, 'B', { k: 'start' }).ok, 'non-host cannot start');
 ok(E.apply(s, 'A', { k: 'start' }, 2000).ok && s.phase === 'racing', 'host starts');
 ok(!E.apply(s, 'C', { k: 'pick', h: 2, bet: 3 }).ok, 'no picks while racing');
+ok(s.race.gates === 7, 'the race uses the track length');
+ok(!E.apply(s, 'A', { k: 'gates', n: 50 }).ok, 'no track changes mid-race');
 ok(!E.tick(s, s.race.endsAt - 1), 'race still running');
 // force a known winner for the test
 s.race.winner = 0;

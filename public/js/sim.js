@@ -2,12 +2,21 @@
 // so the host only has to send the seed. The simulation sticks to + - * / and comparisons (no Math.sin,
 // Math.pow, ...), which JavaScript guarantees to give identical results on every device.
 //
-// Positions are measured in gates: the horses start at 0, gate k sits at k, and gate 20 is the finish line.
+// Positions are measured in gates: the horses start at 0, gate k sits at k, and the last gate is the finish
+// line. The host picks how many gates a race has (MIN_GATES to MAX_GATES, 20 by default).
 // Whenever every horse has made it through the next gate for the first time, all horses stop for PAUSE
 // seconds: one random horse is boosted forward one gate and a different one is set back one gate.
-// No horse gets more than MAX_BOOSTS boosts or MAX_SETBACKS setbacks in one race.
+// No horse gets more than effectCap(gates) boosts, or that many setbacks, in one race.
 
-export const GATES = 20;
+export const DEFAULT_GATES = 20;
+export const MIN_GATES = 3;
+export const MAX_GATES = 100;
+/** Most boosts (and, separately, setbacks) one horse can get in a race: 30% of the gates, rounded up. */
+export const effectCap = gates => Math.ceil((gates * 3) / 10);   // integer math, so 30% of 10 is exactly 3
+export const cleanGates = g => {
+  g = Math.round(+g);
+  return Number.isFinite(g) ? Math.max(MIN_GATES, Math.min(MAX_GATES, g)) : DEFAULT_GATES;
+};
 export const DT = 1 / 30;            // simulation step (seconds)
 export const PAUSE = 2.0;            // how long the horses stand still at a gate event
 export const BOOST_AT = 0.42;        // seconds into the pause when the boosted horse starts its dash
@@ -16,8 +25,6 @@ export const SETBACK_AT = 1.02;      // ...and when the set-back horse starts sl
 export const SETBACK_LEN = 0.45;
 export const AFTER_WIN = 4;          // keep the rest running this long after the winner crosses the line
 export const COUNTDOWN = 4;          // seconds between "start" and the gates opening
-export const MAX_BOOSTS = 6;         // per horse, per race
-export const MAX_SETBACKS = 6;       // per horse, per race
 
 /** Small, fast, seeded random number generator (mulberry32). Integer math only. */
 export function rng(seed) {
@@ -36,20 +43,22 @@ const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
 
 /**
  * Runs the whole race up front.
- * Returns { n, steps, frames, events, winner, order, fin, endT }
+ * Returns { n, gates, cap, steps, frames, events, winner, order, fin, endT }
  *  frames: Float32Array, frames[step * n + i] = position of horse i at time step * DT
  *  events: [{ t, gate, boost, setback }] — t is when the horses froze; boost/setback is a horse index,
- *          or -1 when every eligible horse has already used up its 6 (only possible in very long races)
+ *          or -1 when every horse that could be picked has already used up its cap
  *  fin[i]: time horse i crossed the finish line (-1 if it never did)
  */
-export function simulate(seed, n) {
+export function simulate(seed, n, gates = DEFAULT_GATES) {
+  const GATES = cleanGates(gates);
+  const cap = effectCap(GATES);
   const r = rng(seed);
   const H = [];
   for (let i = 0; i < n; i++) {
     H.push({ pos: 0, v: 0, base: 0.92 + r() * 0.14, mood: 0.9 + r() * 0.2, moodLeft: 0.3 + r() * 1.2, fin: -1, boosts: 0, setbacks: 0 });
   }
   const pickFrom = list => (list.length ? list[Math.floor(r() * list.length)] : -1);
-  const maxSteps = Math.ceil(240 / DT);
+  const maxSteps = Math.ceil((60 + GATES * 6) / DT);   // far more time than any race needs
   const frames = new Float32Array(maxSteps * n);
   const events = [];
   let t = 0, step = 0, nextGate = 1, pause = null, winner = -1, winT = 0;
@@ -100,8 +109,8 @@ export function simulate(seed, n) {
         if (min >= nextGate) {
           // only horses that haven't hit their limit can be picked
           const all = H.map((h, i) => i);
-          const boost = pickFrom(all.filter(i => H[i].boosts < MAX_BOOSTS));
-          const setback = pickFrom(all.filter(i => i !== boost && H[i].setbacks < MAX_SETBACKS));
+          const boost = pickFrom(all.filter(i => H[i].boosts < cap));
+          const setback = pickFrom(all.filter(i => i !== boost && H[i].setbacks < cap));
           if (boost >= 0) H[boost].boosts++;
           if (setback >= 0) H[setback].setbacks++;
           pause = { t0: t, from: H.map(h => h.pos), boost, setback };
@@ -126,7 +135,7 @@ export function simulate(seed, n) {
     if (fb >= 0) return 1;
     return H[b].pos - H[a].pos || a - b;
   });
-  return { n, steps: step, frames, events, winner, order, fin: H.map(h => h.fin), endT };
+  return { n, gates: GATES, cap, steps: step, frames, events, winner, order, fin: H.map(h => h.fin), endT };
 }
 
 /** Position of every horse at time `t` (seconds since the gates opened), smoothly interpolated. */

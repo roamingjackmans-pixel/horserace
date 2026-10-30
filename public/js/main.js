@@ -2,7 +2,7 @@
 // turns taps into actions.
 import { Room, cleanCode } from './net.js';
 import * as E from './engine.js';
-import { simulate, GATES, BOOST_AT, SETBACK_AT, MAX_BOOSTS, MAX_SETBACKS, eventAt, gatesClearedAt, tallyAt } from './sim.js';
+import { simulate, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, eventAt, gatesClearedAt, tallyAt } from './sim.js';
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { sfx, unlock, isMuted, setMuted } from './audio.js';
@@ -389,12 +389,32 @@ function renderLog(s) {
 }
 
 // ---------------------------------------------------------------- betting
+/** Rough race length for a track, from simulating thousands of races (tools/simstats.mjs). */
+function raceLength(gates) {
+  const secs = Math.max(5, 2.88 * gates - 7);   // 7 gates ≈ 13 s, 20 ≈ 50 s, 100 ≈ 4.5 min
+  if (secs < 30) return `about ${Math.round(secs)} seconds`;
+  if (secs < 90) return `about ${Math.round(secs / 5) * 5} seconds`;
+  return `about ${Math.round(secs / 30) / 2} minutes`;
+}
+
 function renderBetting(s) {
+  // the host is typing a gate count: don't redraw under their fingers (it redraws when they finish)
+  if (document.activeElement && document.activeElement.id === 'gatesInput') { ui.stageKey = ''; return; }
   const pid = myPid(), isHost = s.hostPid === pid, mine = s.picks[pid];
   const online = s.order.filter(id => s.players[id] && s.players[id].on);
-  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, s.order.map(id => s.players[id] && s.players[id].name)]);
+  const G = E.gatesOf(s), cap = effectCap(G);
+  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, s.order.map(id => s.players[id] && s.players[id].name)]);
   if (key === ui.stageKey) return;
   ui.stageKey = key;
+  const presets = [[7, 'Quick'], [20, 'Classic'], [50, 'Long'], [100, 'Marathon']];
+  const track = `<div class="trackbar">
+      <span class="label">🏁 Track</span>
+      ${isHost
+      ? `<div class="stepper"><button data-gstep="-1" aria-label="Fewer gates" ${G <= MIN_GATES ? 'disabled' : ''}>−</button><input id="gatesInput" type="number" inputmode="numeric" min="${MIN_GATES}" max="${MAX_GATES}" value="${G}" aria-label="Number of gates"><button data-gstep="1" aria-label="More gates" ${G >= MAX_GATES ? 'disabled' : ''}>+</button></div><span class="gunit">gates</span>
+         <div class="quick presets">${presets.map(([n, name]) => `<button data-gates="${n}" class="${G === n ? 'on' : ''}">${name} ${n}</button>`).join('')}</div>`
+      : `<b class="gcount">${G} gates</b>`}
+      <div class="track-note">Max <b>${cap} boosts</b> and <b>${cap} setbacks</b> per horse (30% of the gates) · races take ${raceLength(G)}${isHost ? '' : ` · ${esc(pname(s, s.hostPid))} picks the track`}</div>
+    </div>`;
   const cards = s.horses.map((h, i) => {
     const bs = E.backers(s, i);
     const owner = bs[0];
@@ -420,8 +440,9 @@ function renderBetting(s) {
     : 'Tap a horse to bet on it.';
   const hostName = esc(pname(s, s.hostPid));
   $('#stage').innerHTML = `<div class="card panel">
-    <div class="phase-head"><h2>Race ${s.raceNo}</h2><span class="sub">${s.horses.length} horses · 20 gates</span></div>
+    <div class="phase-head"><h2>Race ${s.raceNo}</h2><span class="sub">${s.horses.length} horses · ${G} gates</span></div>
     <p class="hint">Pick a horse and bet 1 to 20 chips. Lots of people can back the same horse, but only the first to pick it can rename it.</p>
+    ${track}
     <div class="horses">${cards}</div>
     <div class="betbar">
       <span class="label">Your bet</span>
@@ -463,6 +484,20 @@ function renderBetting(s) {
   };
   $('#stage').querySelectorAll('[data-step]').forEach(b => b.onclick = () => setBet(ui.bet + +b.dataset.step));
   $('#stage').querySelectorAll('[data-set]').forEach(b => b.onclick = () => setBet(+b.dataset.set));
+  // track length (host only)
+  const setGates = n => {
+    n = Math.max(MIN_GATES, Math.min(MAX_GATES, Math.round(n)));
+    if (!Number.isFinite(n) || n === E.gatesOf(ui.state)) { ui.stageKey = ''; renderBetting(ui.state); return; }
+    sfx.click();
+    ui.room.act({ k: 'gates', n });
+  };
+  $('#stage').querySelectorAll('[data-gstep]').forEach(b => b.onclick = () => setGates(E.gatesOf(ui.state) + +b.dataset.gstep));
+  $('#stage').querySelectorAll('[data-gates]').forEach(b => b.onclick = () => setGates(+b.dataset.gates));
+  const gi = $('#gatesInput');
+  if (gi) {
+    gi.onkeydown = e => { if (e.key === 'Enter') gi.blur(); };
+    gi.onblur = () => setGates(parseInt(gi.value, 10));   // also redraws if nothing changed
+  }
   const start = $('#stage [data-start]');
   if (start) start.onclick = () => {
     const st = ui.state;
@@ -498,10 +533,10 @@ function renameHorse(h) {
 
 // ---------------------------------------------------------------- the race
 function getSim(race) {
-  const k = `${race.seed}:${race.n}`;
+  const k = `${race.seed}:${race.n}:${race.gates || 20}`;
   let sim = ui.sims.get(k);
   if (!sim) {
-    sim = simulate(race.seed, race.n);
+    sim = simulate(race.seed, race.n, race.gates || 20);
     ui.sims.set(k, sim);
     if (ui.sims.size > 4) ui.sims.delete(ui.sims.keys().next().value);
   }
@@ -607,7 +642,7 @@ function raceFrame() {
   }
   // gate counter
   const cleared = gatesClearedAt(sim, t);
-  const gi = won ? 'Finished!' : t < 0 ? '20 gates to go' : `Gate ${cleared} of ${GATES} cleared by everyone`;
+  const gi = won ? 'Finished!' : t < 0 ? `${sim.gates} gates to go` : `Gate ${cleared} of ${sim.gates} cleared by everyone`;
   if (gi !== R.gi) { R.gi = gi; $('#gateInfo').textContent = gi; }
   if (now - R.lastStand > 250) { R.lastStand = now; updateStandings(); }
 
@@ -633,9 +668,9 @@ function updateStandings(force) {
   const tally = tallyAt(sim, t);
   const html = order.map((i, k) => {
     const who = E.backers(s, i).map(id => esc(pav(s, id))).join('');
-    // boosts and setbacks so far (6 of either is the most a horse can get in one race)
-    const b = tally.boosts[i], sb = tally.setbacks[i];
-    const fx = `<span class="fx" title="${b} of ${MAX_BOOSTS} boosts, ${sb} of ${MAX_SETBACKS} setbacks"><span class="${b >= MAX_BOOSTS ? 'maxed' : ''}">⚡${b}</span><span class="${sb >= MAX_SETBACKS ? 'maxed' : ''}">🐌${sb}</span></span>`;
+    // boosts and setbacks so far (a horse can get at most sim.cap of each: 30% of the gates)
+    const b = tally.boosts[i], sb = tally.setbacks[i], cap = sim.cap;
+    const fx = `<span class="fx" title="${b} of ${cap} boosts, ${sb} of ${cap} setbacks"><span class="${b >= cap ? 'maxed' : ''}">⚡${b}/${cap}</span><span class="${sb >= cap ? 'maxed' : ''}">🐌${sb}/${cap}</span></span>`;
     return `<div class="stand ${mine && mine.h === i ? 'mine' : ''}"><span class="place">${ordinal(k + 1)}</span><span class="chip" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span><span class="nm">${esc(s.horses[i].name)}</span>${fx}<span class="who">${who}</span></div>`;
   }).join('');
   if (html !== ui.race.stand || force) { ui.race.stand = html; $('#standings').innerHTML = html; }

@@ -1,9 +1,11 @@
 // Room state and game rules. Only the host runs these functions; everyone else just receives the state.
 // Every function here is plain data in, plain data out, so it also runs under Node for tests.
 import { NAMES } from './names.js';
-import { simulate, COUNTDOWN } from './sim.js';
+import { simulate, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
 
-export const PROTO = 2;               // bump when the message format, rules or race simulation change
+export const PROTO = 3;               // bump when the message format, rules or race simulation change
+/** Gates on this lobby's track (older saved lobbies didn't have the setting). */
+export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
 export const MAX_BET = 20;
 export const PENALTY_MULT = 2;        // winners dish out 2x their bet in penalties
@@ -51,7 +53,7 @@ export function newRoom(code, host, now = Date.now()) {
   const s = {
     v: PROTO, code, hostPid: host.pid, created: now,
     players: {}, order: [], joinSeq: 0,
-    raceNo: 0, phase: 'betting', horses: [], picks: {}, pickSeq: 0, recent: [],
+    raceNo: 0, phase: 'betting', horses: [], picks: {}, pickSeq: 0, recent: [], gates: DEFAULT_GATES,
     race: null, res: null, log: [], logId: 0,
   };
   addPlayer(s, host);
@@ -124,7 +126,7 @@ export function backers(s, h) {
 
 /**
  * Apply a player's action. Returns { ok, err?, attack? }.
- * Actions: pick {h, bet} · bet {bet} · unpick · rename {h, name} · start · attack {hits} · next · profile {name, av} · remove {pid}
+ * Actions: pick {h, bet} · bet {bet} · unpick · rename {h, name} · gates {n} · start · attack {hits} · next · profile {name, av} · remove {pid}
  */
 export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
   const me = s.players[pid];
@@ -175,12 +177,23 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       for (const id in s.picks) if (!s.players[id] || !s.players[id].on) delete s.picks[id];
       if (!Object.keys(s.picks).length) return { ok: false, err: 'Nobody has bet yet' };
       const seed = Math.floor(rand() * 4294967296) >>> 0;
-      const sim = simulate(seed, s.horses.length);
+      const gates = gatesOf(s);
+      const sim = simulate(seed, s.horses.length, gates);
       const startAt = now + COUNTDOWN * 1000;
-      s.race = { seed, n: s.horses.length, startAt, endsAt: startAt + Math.ceil((sim.endT + 1.5) * 1000), winner: sim.winner, order: sim.order };
+      s.race = { seed, n: s.horses.length, gates, startAt, endsAt: startAt + Math.ceil((sim.endT + 1.5) * 1000), winner: sim.winner, order: sim.order };
       s.phase = 'racing';
       const bettors = Object.keys(s.picks).length;
-      log(s, `Race ${s.raceNo} is off! ${bettors} ${bettors === 1 ? 'bet' : 'bets'} placed`);
+      log(s, `Race ${s.raceNo} is off! ${gates} gates, ${bettors} ${bettors === 1 ? 'bet' : 'bets'} placed`);
+      return { ok: true };
+    }
+    case 'gates': {
+      if (!isHost) return { ok: false, err: 'Only the host can change the track' };
+      if (s.phase !== 'betting') return { ok: false, err: 'You can change the track between races' };
+      const g = int(a.n);
+      if (!(g >= MIN_GATES && g <= MAX_GATES)) return { ok: false, err: `Tracks have ${MIN_GATES} to ${MAX_GATES} gates` };
+      if (g === gatesOf(s)) return { ok: true };
+      s.gates = g;
+      log(s, `${me.name} set the track to ${g} gates (max ${effectCap(g)} boosts and ${effectCap(g)} setbacks per horse)`);
       return { ok: true };
     }
     case 'attack': {

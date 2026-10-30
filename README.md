@@ -11,10 +11,14 @@ ridiculous horses, and dish out penalties to your friends when you win.
 - Every race, **4 to 6 horses** show up, each with one of **200 funny names**.
 - Each player **picks a horse and bets 1 to 20 chips**. Several people can back the same horse, but only the
   **first person to pick it can rename it**.
-- The track has **20 evenly spaced gates** (gate 20 is the finish line). Every time **all** the horses make it
-  through the next gate for the first time, every horse stops for a moment: **one horse is boosted forward one
-  gate and a different one is set back one gate**. No horse gets more than **6 boosts or 6 setbacks** in one
-  race (the live standings show each horse's ⚡ and 🐌 count).
+- The track has **20 evenly spaced gates** by default (the last gate is the finish line). The host can set it
+  anywhere from **3 to 100 gates** between races, with presets for Quick (7), Classic (20), Long (50) and
+  Marathon (100). Every time **all** the horses make it through the next gate for the first time, every horse
+  stops for a moment: **one horse is boosted forward one gate and a different one is set back one gate**.
+- No horse gets more boosts, or more setbacks, than **30% of the gates, rounded up**: 3 each on 7 gates, 6 on
+  20, 30 on 100. The live standings show each horse's ⚡ and 🐌 count against the cap.
+- Rough race lengths: 7 gates about 13 seconds, 20 gates about 50 seconds, 50 gates about 2¼ minutes,
+  100 gates about 4½ minutes (plus a 4-second countdown).
 - If your horse wins, you **win the chips you bet**, and you get **twice your bet in penalties** to hand out to
   anyone else, split however you like. Everyone you hit gets a popup saying you attacked them.
 - If your horse loses, you **take penalties equal to your bet**.
