@@ -2,7 +2,7 @@
 // turns taps into actions.
 import { Room, cleanCode } from './net.js';
 import * as E from './engine.js';
-import { simulate, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, eventAt, gatesClearedAt, tallyAt } from './sim.js';
+import { simulate, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, eventAt, gatesClearedAt } from './sim.js';
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { sfx, unlock, isMuted, setMuted } from './audio.js';
@@ -665,13 +665,9 @@ function updateStandings(force) {
     if (done(b)) return 1;
     return pos[b] - pos[a];
   });
-  const tally = tallyAt(sim, t);
   const html = order.map((i, k) => {
     const who = E.backers(s, i).map(id => esc(pav(s, id))).join('');
-    // boosts and setbacks so far (a horse can get at most sim.cap of each: 30% of the gates)
-    const b = tally.boosts[i], sb = tally.setbacks[i], cap = sim.cap;
-    const fx = `<span class="fx" title="${b} of ${cap} boosts, ${sb} of ${cap} setbacks"><span class="${b >= cap ? 'maxed' : ''}">⚡${b}/${cap}</span><span class="${sb >= cap ? 'maxed' : ''}">🐌${sb}/${cap}</span></span>`;
-    return `<div class="stand ${mine && mine.h === i ? 'mine' : ''}"><span class="place">${ordinal(k + 1)}</span><span class="chip" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span><span class="nm">${esc(s.horses[i].name)}</span>${fx}<span class="who">${who}</span></div>`;
+    return `<div class="stand ${mine && mine.h === i ? 'mine' : ''}"><span class="place">${ordinal(k + 1)}</span><span class="chip" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span><span class="nm">${esc(s.horses[i].name)}</span><span class="who">${who}</span></div>`;
   }).join('');
   if (html !== ui.race.stand || force) { ui.race.stand = html; $('#standings').innerHTML = html; }
 }

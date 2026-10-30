@@ -16,7 +16,7 @@ ridiculous horses, and dish out penalties to your friends when you win.
   Marathon (100). Every time **all** the horses make it through the next gate for the first time, every horse
   stops for a moment: **one horse is boosted forward one gate and a different one is set back one gate**.
 - No horse gets more boosts, or more setbacks, than **30% of the gates, rounded up**: 3 each on 7 gates, 6 on
-  20, 30 on 100. The live standings show each horse's ⚡ and 🐌 count against the cap.
+  20, 30 on 100.
 - Rough race lengths: 7 gates about 13 seconds, 20 gates about 50 seconds, 50 gates about 2¼ minutes,
   100 gates about 4½ minutes (plus a 4-second countdown).
 - If your horse wins, you **win the chips you bet**, and you get **twice your bet in penalties** to hand out to

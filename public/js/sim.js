@@ -160,17 +160,6 @@ export function eventAt(race, t) {
   return null;
 }
 
-/** Boosts and setbacks each horse has taken by time t: { boosts: [..], setbacks: [..] } */
-export function tallyAt(race, t) {
-  const boosts = new Array(race.n).fill(0), setbacks = new Array(race.n).fill(0);
-  for (const ev of race.events) {
-    if (ev.t > t) break;
-    if (ev.boost >= 0 && t >= ev.t + BOOST_AT) boosts[ev.boost]++;
-    if (ev.setback >= 0 && t >= ev.t + SETBACK_AT) setbacks[ev.setback]++;
-  }
-  return { boosts, setbacks };
-}
-
 /** How many gate events have started by time t (gates every horse has cleared). */
 export function gatesClearedAt(race, t) {
   let c = 0;
