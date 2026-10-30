@@ -13,12 +13,17 @@ ridiculous horses, and dish out penalties to your friends when you win.
   **first person to pick it can rename it**.
 - The track has **20 evenly spaced gates** by default (the last gate is the finish line). The host can set it
   anywhere from **3 to 100 gates** between races, with presets for Quick (7), Classic (20), Long (50) and
-  Marathon (100). Every time **all** the horses make it through the next gate for the first time, every horse
-  stops for a moment: **one horse is boosted forward one gate and a different one is set back one gate**.
+  Marathon (100).
+- Horses don't run smoothly: each one waits a random 0.3–1.3 seconds, then **hops forward exactly one gate**
+  in a quick leap. Every horse has the same odds (no hidden speed), so a horse way out in front can still be
+  caught: on 20 gates, a horse leading by 2+ gates at the three-quarter mark still loses about a quarter of
+  the time.
+- Every time **all** the horses make it through the next gate for the first time, every horse stops for a
+  moment: **one horse is boosted forward one gate and a different one is set back one gate**.
 - No horse gets more boosts, or more setbacks, than **30% of the gates, rounded up**: 3 each on 7 gates, 6 on
   20, 30 on 100.
-- Rough race lengths: 7 gates about 13 seconds, 20 gates about 50 seconds, 50 gates about 2¼ minutes,
-  100 gates about 4½ minutes (plus a 4-second countdown).
+- Rough race lengths: 7 gates about 12 seconds, 20 gates about 50 seconds, 50 gates about 2⅓ minutes,
+  100 gates about 5 minutes (plus a 4-second countdown).
 - If your horse wins, you **win the chips you bet**, and you get **twice your bet in penalties** to hand out to
   anyone else, split however you like. Everyone you hit gets a popup saying you attacked them.
 - If your horse loses, you **take penalties equal to your bet**.

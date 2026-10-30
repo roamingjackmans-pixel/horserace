@@ -67,6 +67,7 @@ export const sfx = {
     n.forEach((f, i) => { tone(f, d[i] + 0.05, { type: 'sawtooth', vol: 0.09, at, attack: 0.02 }); tone(f * 2, d[i], { type: 'square', vol: 0.025, at }); at += d[i]; });
   },
   gallop() { noise(0.05, { vol: 0.08, freq: 220, q: 2 }); noise(0.05, { vol: 0.06, freq: 260, q: 2, at: 0.09 }); },
+  hop() { noise(0.04, { vol: 0.1, freq: 900, q: 3 }); tone(260, 0.06, { type: 'triangle', vol: 0.05, slide: 0.7 }); },   // a horse lands a hop
   freeze() { tone(1200, 0.18, { type: 'sine', vol: 0.12, slide: 0.5 }); },
   boost() { tone(300, 0.4, { type: 'sawtooth', vol: 0.1, slide: 4 }); tone(600, 0.35, { type: 'square', vol: 0.05, slide: 3, at: 0.05 }); },
   setback() {

@@ -27,20 +27,23 @@ function limb(ctx, x, y, a1, a2, l1, l2, w1, w2, color, hoof) {
  * A side-on cartoon racehorse with jockey, facing right.
  * (x, y) is the tip of the nose at ground level; the horse is about 112*s wide and 86*s tall.
  * phase: gallop cycle (radians); run: 0 = standing still, 1 = full gallop
+ * opts.lift: how high off the ground the horse is mid-hop (in the same units; the shadow stays down)
  */
 export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts = {}) {
   const silk = SILKS[lane % SILKS.length];
   const [coat, mane] = COATS[coatIdx % COATS.length];
   const far = shade(coat, -0.28);
   const hoof = '#2a2320';
+  const lift = opts.lift || 0;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(s, s);
   const bob = run ? -Math.abs(Math.sin(phase)) * 3.2 * run : 0;
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.18)';
-  ctx.beginPath(); ctx.ellipse(-58, 1, 44, 4.5, 0, 0, TAU); ctx.fill();
-  ctx.translate(0, bob);
+  // shadow (shrinks while the horse is in the air)
+  const sh = Math.max(0.45, 1 - lift / 45);
+  ctx.fillStyle = `rgba(0,0,0,${0.18 * sh})`;
+  ctx.beginPath(); ctx.ellipse(-58, 1, 44 * sh, 4.5 * sh, 0, 0, TAU); ctx.fill();
+  ctx.translate(0, bob - lift);
   const swing = (o, amp) => Math.sin(phase + o) * amp * run;
   const bend = (o, amp) => Math.max(0, Math.sin(phase + o + 1.3)) * amp * run;
   // far legs
@@ -348,8 +351,14 @@ export class TrackView {
     // ---- horses
     for (let i = 0; i < n; i++) {
       const v = (pos[i] - prev[i]) / 0.08;
-      const run = Math.max(0, Math.min(1, Math.abs(v) / 0.6));
-      this.phase[i] = (this.phase[i] || i * 1.7) + (dt > 0 && dt < 0.5 ? dt * (6 + 9 * Math.min(1.6, Math.abs(v))) * (run > 0.05 ? 1 : 0) : 0);
+      // between hops the horses trot on the spot; mid-hop they're at full gallop
+      const finished = race.fin[i] >= 0 && t >= race.fin[i];
+      const live = t > 0 && !ev && !finished;
+      const run = Math.max(live ? 0.3 : 0, Math.min(1, Math.abs(v) / 0.6));
+      this.phase[i] = (this.phase[i] || i * 1.7) + (dt > 0 && dt < 0.5 ? dt * (5 + 9 * Math.min(1.6, Math.abs(v))) * (run > 0.05 ? 1 : 0) : 0);
+      // each hop (and each boost/setback) is a little leap: an arc off the ground
+      const frac = pos[i] - Math.floor(pos[i]);
+      const lift = frac > 0.001 && frac < 0.999 ? Math.sin(frac * Math.PI) * 22 : 0;
       const x = X(pos[i]), y = laneTop(i) + laneH - 5;
       if (x < -horsePx || x > W + horsePx * 2) continue;
       // boost / setback effects
@@ -384,7 +393,7 @@ export class TrackView {
         ctx.fillText(label, tx + 5, ty + 8.5);
         ctx.restore();
       }
-      drawHorse(ctx, x, y, sc, i, h ? h.coat : i, this.phase[i], run);
+      drawHorse(ctx, x, y, sc, i, h ? h.coat : i, this.phase[i], run, { lift });
       // "you" marker
       if (i === this.myLane) {
         const by = laneTop(i) + 3 + Math.sin(t * 5) * 1.5;

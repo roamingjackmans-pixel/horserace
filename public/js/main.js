@@ -391,7 +391,7 @@ function renderLog(s) {
 // ---------------------------------------------------------------- betting
 /** Rough race length for a track, from simulating thousands of races (tools/simstats.mjs). */
 function raceLength(gates) {
-  const secs = Math.max(5, 2.88 * gates - 7);   // 7 gates ≈ 13 s, 20 ≈ 50 s, 100 ≈ 4.5 min
+  const secs = Math.max(4, 3.05 * gates - 9.4);   // 7 gates ≈ 12 s, 20 ≈ 50 s, 100 ≈ 5 min
   if (secs < 30) return `about ${Math.round(secs)} seconds`;
   if (secs < 90) return `about ${Math.round(secs / 5) * 5} seconds`;
   return `about ${Math.round(secs / 30) / 2} minutes`;
@@ -629,8 +629,13 @@ function raceFrame() {
     b.classList.toggle('show', !!banner);
   }
   if (t > 0.3 && !R.saidOff) { R.saidOff = true; if (!ev && !won) comment("And they're off!"); }
-  // galloping hooves while they run
-  if (t > 0 && !ev && !won && now - R.lastGallop > 420) { R.lastGallop = now; sfx.gallop(); }
+  // a clop each time a horse lands a hop (at most one sound every 60 ms)
+  if (R.prevPos && t > 0 && !ev && now - (R.lastClop || 0) > 60) {
+    for (let i = 0; i < pos.length; i++) {
+      if (Math.floor(pos[i]) > Math.floor(R.prevPos[i])) { R.lastClop = now; sfx.hop(); break; }
+    }
+  }
+  R.prevPos = pos.slice();
   // lead changes
   if (t > 1 && !ev && !won) {
     let lead = 0;

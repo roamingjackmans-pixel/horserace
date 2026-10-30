@@ -4,6 +4,8 @@
 //
 // Positions are measured in gates: the horses start at 0, gate k sits at k, and the last gate is the finish
 // line. The host picks how many gates a race has (MIN_GATES to MAX_GATES, 20 by default).
+// Horses don't run smoothly: each one waits a random moment, then hops forward exactly one gate in a quick
+// JUMP_LEN-second leap. Every horse has the same odds, so a horse way out in front can still be caught.
 // Whenever every horse has made it through the next gate for the first time, all horses stop for PAUSE
 // seconds: one random horse is boosted forward one gate and a different one is set back one gate.
 // No horse gets more than effectCap(gates) boosts, or that many setbacks, in one race.
@@ -25,6 +27,9 @@ export const SETBACK_AT = 1.02;      // ...and when the set-back horse starts sl
 export const SETBACK_LEN = 0.45;
 export const AFTER_WIN = 4;          // keep the rest running this long after the winner crosses the line
 export const COUNTDOWN = 4;          // seconds between "start" and the gates opening
+export const JUMP_LEN = 0.22;        // one hop forward of one gate takes this long
+export const WAIT_MIN = 0.3;         // each horse waits this long...
+export const WAIT_MAX = 1.3;         // ...to this long (at random) between hops
 
 /** Small, fast, seeded random number generator (mulberry32). Integer math only. */
 export function rng(seed) {
@@ -49,13 +54,16 @@ const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
  *          or -1 when every horse that could be picked has already used up its cap
  *  fin[i]: time horse i crossed the finish line (-1 if it never did)
  */
-export function simulate(seed, n, gates = DEFAULT_GATES) {
+export function simulate(seed, n, gates = DEFAULT_GATES, tune = {}) {
   const GATES = cleanGates(gates);
   const cap = effectCap(GATES);
+  const waitMin = tune.waitMin || WAIT_MIN, waitMax = tune.waitMax || WAIT_MAX;   // (tune: for tools/simstats only)
   const r = rng(seed);
+  const wait = () => waitMin + r() * (waitMax - waitMin);
   const H = [];
   for (let i = 0; i < n; i++) {
-    H.push({ pos: 0, v: 0, base: 0.92 + r() * 0.14, mood: 0.9 + r() * 0.2, moodLeft: 0.3 + r() * 1.2, fin: -1, boosts: 0, setbacks: 0 });
+    // jump: the hop in progress { start, from } · next: when the next hop starts · at: when it reached its spot
+    H.push({ pos: 0, jump: null, next: 0.1 + r() * (waitMax - 0.1), at: 0, fin: -1, boosts: 0, setbacks: 0 });
   }
   const pickFrom = list => (list.length ? list[Math.floor(r() * list.length)] : -1);
   const maxSteps = Math.ceil((60 + GATES * 6) / DT);   // far more time than any race needs
@@ -64,13 +72,18 @@ export function simulate(seed, n, gates = DEFAULT_GATES) {
   let t = 0, step = 0, nextGate = 1, pause = null, winner = -1, winT = 0;
 
   const record = () => { for (let i = 0; i < n; i++) frames[step * n + i] = H[i].pos; step++; };
+  const finish = (i, at) => {
+    const h = H[i];
+    if (h.fin >= 0) return;
+    h.fin = at;
+    if (winner < 0 || at < winT) { winner = i; winT = at; }
+  };
+  // a boost during a stop can carry a horse over the line too
   const crossed = (i, prev, at) => {
     const h = H[i];
     if (h.fin >= 0 || h.pos < GATES) return;
-    // when exactly did it cross? (straight line between the two steps)
     const span = h.pos - prev;
-    h.fin = span > 0 ? at - DT + DT * ((GATES - prev) / span) : at;
-    if (winner < 0 || h.fin < winT) { winner = i; winT = h.fin; }
+    finish(i, span > 0 ? at - DT + DT * ((GATES - prev) / span) : at);
   };
 
   record(); // t = 0
@@ -86,38 +99,53 @@ export function simulate(seed, n, gates = DEFAULT_GATES) {
         H[i].pos = p;
         crossed(i, prev, t);
       }
-      if (pt >= PAUSE) pause = null;
+      if (pt >= PAUSE) {
+        const done = pause;
+        pause = null;
+        // back to hopping, each horse after its own fresh random wait
+        for (let i = 0; i < n; i++) {
+          const h = H[i];
+          h.pos = Math.round(h.pos);
+          if (i === done.boost || i === done.setback) h.at = t;
+          h.next = t + wait();
+        }
+      }
     } else {
+      // hops: land the ones in the air, start new ones when a horse's wait is up
+      // (no new hops while everyone is through the next gate and we're about to stop)
+      let minLanded = Infinity;
+      for (const h of H) { const p = h.jump ? h.jump.from : h.pos; if (p < minLanded) minLanded = p; }
+      const stopping = winner < 0 && nextGate < GATES && minLanded >= nextGate;
       for (let i = 0; i < n; i++) {
         const h = H[i];
-        const prev = h.pos;
-        if (h.fin >= 0) {          // past the line: ease off
-          h.v *= 0.96;
-          h.pos += h.v * DT;
-          continue;
+        if (h.fin >= 0) continue;                       // over the line: stands there
+        if (h.jump) {
+          const k = (t - h.jump.start) / JUMP_LEN;
+          if (k >= 1) {
+            const land = h.jump.start + JUMP_LEN;
+            h.pos = h.jump.from + 1; h.jump = null; h.at = land;
+            h.next = land + wait();
+            if (h.pos >= GATES) finish(i, land);
+          } else {
+            h.pos = h.jump.from + ease(k);
+          }
         }
-        h.moodLeft -= DT;
-        if (h.moodLeft <= 0) { h.mood = 0.72 + r() * 0.56; h.moodLeft = 0.6 + r() * 1.6; }
-        h.v += (h.base * h.mood - h.v) * 0.09;
-        h.pos += h.v * DT;
-        crossed(i, prev, t);
+        if (!h.jump && h.fin < 0 && !stopping && t >= h.next) {
+          h.jump = { start: h.next, from: h.pos };
+          h.pos = h.jump.from + ease((t - h.jump.start) / JUMP_LEN);
+        }
       }
-      // everyone through the next gate for the first time? (not after the race is won, and not the finish)
-      if (winner < 0 && nextGate < GATES) {
-        let min = H[0].pos;
-        for (let i = 1; i < n; i++) if (H[i].pos < min) min = H[i].pos;
-        if (min >= nextGate) {
-          // only horses that haven't hit their limit can be picked
-          const all = H.map((h, i) => i);
-          const boost = pickFrom(all.filter(i => H[i].boosts < cap));
-          const setback = pickFrom(all.filter(i => i !== boost && H[i].setbacks < cap));
-          if (boost >= 0) H[boost].boosts++;
-          if (setback >= 0) H[setback].setbacks++;
-          pause = { t0: t, from: H.map(h => h.pos), boost, setback };
-          events.push({ t, gate: nextGate, boost, setback });
-          nextGate++;
-          for (const h of H) h.v = 0;
-        }
+      // everyone through the next gate for the first time (and nobody mid-air)? Freeze!
+      if (stopping && H.every(h => !h.jump)) {
+        // only horses that haven't hit their limit can be picked
+        const all = H.map((h, i) => i);
+        const boost = pickFrom(all.filter(i => H[i].boosts < cap));
+        const setback = pickFrom(all.filter(i => i !== boost && H[i].setbacks < cap));
+        if (boost >= 0) H[boost].boosts++;
+        if (setback >= 0) H[setback].setbacks++;
+        pause = { t0: t, from: H.map(h => h.pos), boost, setback };
+        events.push({ t, gate: nextGate, boost, setback });
+        nextGate++;
       }
     }
     record();
@@ -127,13 +155,13 @@ export function simulate(seed, n, gates = DEFAULT_GATES) {
     }
   }
   const endT = (step - 1) * DT;
-  // finishing order: by finish time, then (for horses still running) by how far they got
+  // finishing order: by finish time, then (for horses still going) by how far they got, then who got there first
   const order = H.map((h, i) => i).sort((a, b) => {
     const fa = H[a].fin, fb = H[b].fin;
     if (fa >= 0 && fb >= 0) return fa - fb || a - b;
     if (fa >= 0) return -1;
     if (fb >= 0) return 1;
-    return H[b].pos - H[a].pos || a - b;
+    return H[b].pos - H[a].pos || H[a].at - H[b].at || a - b;
   });
   return { n, gates: GATES, cap, steps: step, frames, events, winner, order, fin: H.map(h => h.fin), endT };
 }
