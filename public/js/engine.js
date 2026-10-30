@@ -2,7 +2,7 @@
 // Every function here is plain data in, plain data out, so it also runs under Node for tests.
 import { NAMES } from './names.js';
 import { cleanLook, isCustom } from './looks.js';
-import { writeRace, playRace, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
+import { writeRace, playRace, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES } from './sim.js';
 
 export const PROTO = 9;               // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
@@ -268,7 +268,7 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       if (!(g >= MIN_GATES && g <= MAX_GATES)) return { ok: false, err: `Tracks have ${MIN_GATES} to ${MAX_GATES} gates` };
       if (g === gatesOf(s)) return { ok: true };
       s.gates = g;
-      log(s, `${me.name} set the track to ${g} gates (max ${effectCap(g)} boosts and ${effectCap(g)} setbacks per horse)`);
+      log(s, `${me.name} set the track to ${g} gates`);
       return { ok: true };
     }
     case 'attack': {

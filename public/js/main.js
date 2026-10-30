@@ -2,7 +2,7 @@
 // turns taps into actions.
 import { Room, cleanCode } from './net.js';
 import * as E from './engine.js';
-import { simulate, playRace, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, hopCap, leadCap, eventAt, gatesClearedAt } from './sim.js';
+import { simulate, playRace, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, eventAt, gatesClearedAt } from './sim.js';
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { PodiumView } from './podium.js';
@@ -408,7 +408,7 @@ function renderBetting(s) {
   if (document.activeElement && document.activeElement.id === 'gatesInput') { ui.stageKey = ''; return; }
   const pid = myPid(), isHost = s.hostPid === pid, mine = s.picks[pid];
   const online = s.order.filter(id => s.players[id] && s.players[id].on);
-  const G = E.gatesOf(s), cap = effectCap(G);
+  const G = E.gatesOf(s);
   const hn = s.horses.length;
   const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, s.order.map(id => s.players[id] && s.players[id].name)]);
   if (key === ui.stageKey) return;
@@ -429,7 +429,7 @@ function renderBetting(s) {
            <div class="quick presets"><button data-hrandom>🎲 Random ${E.RANDOM_MIN}–${E.RANDOM_MAX}</button></div>`
       : `<b class="gcount">${hn} horses</b>`}
       </div>
-      <div class="track-note">Each horse gets up to <b>${hopCap(G)} hops</b>, <b>${cap} boosts</b> and <b>${cap} setbacks</b>, and the leader can never be more than <b>${leadCap(G)} gates</b> ahead of 2nd · races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
+      <div class="track-note">Races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
     </div>`;
   const cards = s.horses.map((h, i) => {
     const bs = E.backers(s, i);
