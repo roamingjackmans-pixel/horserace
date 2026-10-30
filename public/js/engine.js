@@ -3,8 +3,9 @@
 import { NAMES } from './names.js';
 import { cleanLook, isCustom } from './looks.js';
 import { writeRace, playRace, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES } from './sim.js';
+import { ACH_BY_ID, ACH_COUNT } from './achievements.js';
 
-export const PROTO = 9;               // bump when the message format, rules or race simulation change
+export const PROTO = 10;              // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
@@ -79,22 +80,26 @@ export function addPlayer(s, p) {
   if (!pid) return { ok: false, err: 'Bad player id' };
   const name = clean(p.name, 20) || 'Mystery Guest';
   const av = clean(p.av, 8) || '🐴';
+  const ach = achCount(p.ach);
   const old = s.players[pid];
   const online = s.order.filter(id => s.players[id].on).length;
   const full = { ok: false, err: `This lobby is full (${MAX_PLAYERS} players max)` };
   if (old) {
     const back = !old.on;
     if (back && online >= MAX_PLAYERS) return full;
-    old.on = true; old.name = name; old.av = av; old.relay = !!p.relay;
+    old.on = true; old.name = name; old.av = av; old.relay = !!p.relay; old.ach = Math.max(old.ach || 0, ach);
     if (back && !(s.quietUntil > Date.now())) log(s, `${name} is back`);
     return { ok: true, back };
   }
   if (online >= MAX_PLAYERS) return full;
-  s.players[pid] = { pid, name, av, n: ++s.joinSeq, on: true, chips: 0, wins: 0, taken: 0, races: 0, relay: !!p.relay };
+  s.players[pid] = { pid, name, av, n: ++s.joinSeq, on: true, chips: 0, wins: 0, taken: 0, races: 0, relay: !!p.relay, ach };
   s.order.push(pid);
   log(s, `${name} joined`);
   return { ok: true, back: false };
 }
+
+/** How many achievements a player says they have (0 to all of them). */
+const achCount = v => { const n = int(v); return n >= 0 ? Math.min(ACH_COUNT, n) : 0; };
 
 export function setOnline(s, pid, on) {
   const p = s.players[pid];
@@ -163,6 +168,7 @@ export function backers(s, h) {
 /**
  * Apply a player's action. Returns { ok, err?, attack? }.
  * Actions: pick {h, bet} · bet {bet} · unpick · rename {h, name} · gates {n} · start · attack {hits} · next · profile {name, av} · remove {pid}
+ *          · ach {ids, n} (a player unlocked some achievements and now has n)
  */
 export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
   const me = s.players[pid];
@@ -305,6 +311,17 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       const name = clean(a.name, 20), av = clean(a.av, 8);
       if (name && name !== me.name) { log(s, `${me.name} is now ${name}`); me.name = name; }
       if (av) me.av = av;
+      return { ok: true };
+    }
+    case 'ach': {
+      // achievements live on each player's device; the lobby just hears about new ones
+      // (several at once make one line in the log, so a big race doesn't push everything else out)
+      const ids = Array.isArray(a.ids) ? a.ids.slice(0, ACH_COUNT) : [a.id];
+      const got = [...new Set(ids.map(id => String(id || '').slice(0, 24)))].map(id => ACH_BY_ID[id]).filter(Boolean);
+      if (!got.length) return { ok: false, err: 'No such achievement' };
+      me.ach = Math.max(me.ach || 0, achCount(a.n));
+      const names = got.map(x => `${x.icon} ${x.name}`);
+      log(s, `🏅 ${me.name} unlocked ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]}`);
       return { ok: true };
     }
     case 'remove': {

@@ -8,6 +8,7 @@ import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { PodiumView } from './podium.js';
 import { PALETTE, HATS, HORSE_GEAR, RIDER_GEAR, resolveLook, randomLook } from './looks.js';
 import { sfx, unlock, isMuted, setMuted } from './audio.js';
+import { ACHIEVEMENTS, ACH_BY_ID, ACH_COUNT, GROUPS, cleanProgress, observe, progressOf } from './achievements.js';
 
 const $ = sel => document.querySelector(sel);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -26,6 +27,10 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
 const TAB = tabStore.get('hr_tab') || (() => { const t = rid(8); tabStore.set('hr_tab', t); return t; })();
 const profile = { name: store.get('hr_name', ''), av: store.get('hr_av', '') || pick(AVATARS) };
 store.set('hr_av', profile.av);
+
+// achievements: kept on this device, across every lobby (the rules are in achievements.js)
+const achProg = cleanProgress(store.get('hr_ach', null));
+const achCount = () => Object.keys(achProg.got).length;
 
 /** The player id to use in a lobby: this tab's id, or the seat this browser had there before. */
 function seatFor(code) {
@@ -141,7 +146,7 @@ async function createLobby() {
   readProfile();
   setBusy(true);
   homeMsg('Setting up your lobby…', true);
-  const player = { pid: tabStore.get('hr_pid') || rid(), tab: TAB, name: profile.name, av: profile.av };
+  const player = { pid: tabStore.get('hr_pid') || rid(), tab: TAB, name: profile.name, av: profile.av, ach: achCount() };
   const room = new Room(player);
   bindRoom(room);
   try {
@@ -165,7 +170,7 @@ async function joinLobby(raw) {
   homeMsg(`Looking for lobby ${code}…`, true);
   let pid = seatFor(code);
   for (let attempt = 0; attempt < 2; attempt++) {
-    const player = { pid, tab: TAB, name: profile.name, av: profile.av };
+    const player = { pid, tab: TAB, name: profile.name, av: profile.av, ach: achCount() };
     const room = new Room(player);
     bindRoom(room);
     try {
@@ -313,6 +318,7 @@ function onState(s) {
     if (s.phase === 'betting' && was === 'results') sfx.join();
   }
   checkAttacks(s);
+  checkAchievements(s);
   render();
 }
 
@@ -348,7 +354,7 @@ function renderPlayers(s) {
       <div class="pav">${esc(p.av)}</div>
       <div class="pbody">
         <div class="pname">${esc(p.name)}${id === s.hostPid ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? (p.relay ? '<span class="tag relay" title="Connected through the backup relay (a direct connection didn\'t work for them)">📡 RELAY</span>' : '') : '<span class="tag away">AWAY</span>'}</div>
-        <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>🤕 <b>${p.taken}</b> penalties</span></div>
+        <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>🤕 <b>${p.taken}</b> penalties</span><span title="Achievements unlocked">🏅 <b>${p.ach || 0}</b></span></div>
         ${status ? `<div class="pstatus">${status}</div>` : ''}
       </div>
       ${isHost && !p.on ? `<button class="premove" data-remove="${esc(id)}" title="Remove from the lobby">✕</button>` : ''}
@@ -935,6 +941,60 @@ function checkAttacks(s) {
   if (changed) tabStore.set('hr_seen', [...ui.seen].slice(-200));
 }
 
+// ---------------------------------------------------------------- achievements
+/** Anything new unlocked in this state? Save, pop up each one, and tell the lobby. */
+function checkAchievements(s) {
+  const fresh = observe(achProg, s, myPid());
+  if (achProg.dirty) {
+    achProg.dirty = false;
+    const { dirty, ...keep } = achProg;
+    store.set('hr_ach', keep);
+  }
+  if (!fresh.length) return;
+  if (ui.room) ui.room.me.ach = achCount();
+  showAchCount();
+  // one at a time, so a big race (first win, all in, photo finish...) is a little parade; the lobby hears
+  // about them all at once
+  fresh.forEach((id, k) => setTimeout(() => announceAch(id), 700 + k * 1100));
+  setTimeout(() => { if (ui.room && ui.room.role) ui.room.act({ k: 'ach', ids: fresh, n: achCount() }); }, 700);
+}
+
+function announceAch(id) {
+  const a = ACH_BY_ID[id];
+  if (!a) return;
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'toast ach';
+  el.innerHTML = `<span class="ach-ic">${a.icon}</span><span class="ach-txt"><small>Achievement unlocked!</small><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></span>`;
+  el.onclick = () => showAchievements();
+  $('#toasts').appendChild(el);
+  sfx.ach();
+  setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 420); }, 5200);
+}
+
+function showAchCount() {
+  $('#achCount').textContent = `${achCount()} / ${ACH_COUNT}`;
+}
+
+function showAchievements() {
+  unlock();
+  modal((el, close) => {
+    const n = achCount();
+    el.innerHTML = `<h2>🏅 Achievements</h2>
+      <p class="ach-sub"><b>${n}</b> of ${ACH_COUNT} unlocked · saved on this device</p>
+      <div class="ach-bar"><i style="width:${Math.round((100 * n) / ACH_COUNT)}%"></i></div>
+      ${GROUPS.map((g, gi) => `<h3 class="ach-group">${esc(g)}</h3><div class="ach-list">${ACHIEVEMENTS.filter(a => a.g === gi).map(a => {
+        const got = achProg.got[a.id], pr = progressOf(achProg, a);
+        return `<div class="ach-item ${got ? 'got' : ''}"><span class="ach-ic">${a.icon}</span><span class="ach-txt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small>${!got && pr ? `<span class="ach-prog"><i style="width:${Math.round((100 * pr[0]) / pr[1])}%"></i><em>${pr[0]} / ${pr[1]}</em></span>` : ''}</span>${got ? '<span class="ach-tick" title="Unlocked">✓</span>' : ''}</div>`;
+      }).join('')}</div>`).join('')}
+      <div class="row"><button class="btn primary" data-close>Close</button></div>`;
+    el.querySelector('[data-close]').onclick = close;
+  }, 'ach-modal');
+}
+$('#achBtn').onclick = () => { sfx.click(); showAchievements(); };
+$('#achTopBtn').onclick = () => { sfx.click(); showAchievements(); };
+showAchCount();
+
 // ---------------------------------------------------------------- home screen horse
 let homeRaf = 0;
 function startHomeHorse() {
@@ -972,7 +1032,7 @@ window.addEventListener('resize', () => { if (ui.state && ui.state.phase !== 'ra
   const saved = tabStore.get('hr_session');
   if (saved && saved.state && Date.now() - saved.at < 6 * 3600e3 && (!urlCode || urlCode === saved.code)) {
     // reloaded the page while in a lobby: go straight back in
-    const player = { pid: saved.pid, tab: TAB, name: profile.name || 'Mystery Guest', av: profile.av };
+    const player = { pid: saved.pid, tab: TAB, name: profile.name || 'Mystery Guest', av: profile.av, ach: achCount() };
     const sp = saved.state.players && saved.state.players[saved.pid];
     if (sp) { player.name = sp.name; player.av = sp.av; }
     const room = new Room(player);

@@ -78,5 +78,6 @@ export const sfx = {
   win() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, { type: 'triangle', vol: 0.18, at: i * 0.1 })); },
   lose() { tone(330, 0.3, { type: 'triangle', vol: 0.12, slide: 0.7 }); },
   attack() { noise(0.35, { vol: 0.4, freq: 180, q: 0.7, type: 'lowpass' }); tone(140, 0.4, { type: 'sine', vol: 0.4, slide: 0.4 }); noise(0.5, { vol: 0.15, freq: 3000, q: 0.5, at: 0.05 }); },
+  ach() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.22, { type: 'triangle', vol: 0.13, at: i * 0.075 })); tone(2093, 0.4, { type: 'sine', vol: 0.06, at: 0.3 }); },
   send() { tone(500, 0.12, { type: 'square', vol: 0.08, slide: 2 }); },
 };

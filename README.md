@@ -52,6 +52,24 @@ ridiculous horses, and dish out penalties to your friends when you win.
 - Under each player's name the lobby keeps a running tally of **chips won and penalties taken** (from lost bets
   and from attacks).
 
+## Achievements
+
+There are **50 achievements** (🏅 on the home screen and in the lobby's top bar), in seven groups: getting
+started, winning, losing, attacking, race moments, tracks, and style & friends. A few examples: Photo Finish
+(win by a single gate), From Last to First, Wire to Wire, Turbo Finish (boosted over the line), Revenge Is
+Sweet, Bite the Hand (penalize the host), Lone Wolf, Bandwagon, Taste the Rainbow, and Horse Whisperer for
+getting all the others.
+
+- They're kept on each player's device (`localStorage`), so they follow you from lobby to lobby. Lifetime
+  counts (wins, chips, penalties taken and handed out) drive the counting ones, which show progress bars.
+- `public/js/achievements.js` has the list and the rules. `observe()` looks at each lobby state from your
+  side; race moments come from replaying the race's stored script, so they match what everyone watched. Each
+  race and each attack is counted once, even after a reload.
+- New unlocks pop up one at a time, and the lobby hears about them in one log line per player
+  ("🏅 Ann unlocked 📸 Photo Finish and 🏁 Wire to Wire"). Everyone's count shows under their name.
+- `node tools/achtest.mjs` plays real engine races and attacks through it, and checks every race moment can
+  happen.
+
 ## How online play works
 
 There is no game server. The person who makes the lobby is the **host**: their browser runs the rules
@@ -108,6 +126,7 @@ and join the code. (Tabs in one browser share the saved name, so rename yourself
 ```bash
 node tools/enginetest.mjs     # the rules: picks, rename rights, payouts, penalty limits, 8-player cap
 node tools/simstats.mjs 3000  # race length, gate stops per race, lane fairness, determinism
+node tools/achtest.mjs        # achievements: the list, unlocks from real races and attacks, counted once
 ```
 
 ## Deploying
@@ -127,6 +146,7 @@ public/              the game (this folder is what gets published)
   js/net.js          PeerJS lobby: host, join, reconnect, host handover
   js/relay.js        the backup relay through public MQTT servers
   js/check.js        the connection check
+  js/achievements.js the 50 achievements and when they unlock
   js/engine.js       lobby state and rules (host only)
   js/sim.js          deterministic race simulation
   js/render.js       canvas track and cartoon horses

@@ -212,7 +212,7 @@ export class Room extends Emitter {
         if (id === this.me.pid) return drop({ t: 'err', code: 'dup', msg: 'You are already in this lobby in another tab' });
         const prev = this.conns.get(id);
         if (prev && prev.open && prev._tab !== m.tab) return drop({ t: 'err', code: 'dup', msg: 'You are already in this lobby in another tab' });
-        const r = E.addPlayer(this.state, { pid: id, name: m.name, av: m.av, relay: !!conn.relay });
+        const r = E.addPlayer(this.state, { pid: id, name: m.name, av: m.av, relay: !!conn.relay, ach: m.ach });
         if (!r.ok) return drop({ t: 'err', code: 'full', msg: r.err });
         if (prev) { this.conns.delete(id); this._send(prev, { t: 'err', code: 'replaced', msg: 'This lobby was opened in another tab' }); setTimeout(() => { try { prev.close(); } catch { } }, 300); }
         pid = id; conn._pid = id; conn._tab = m.tab;
@@ -307,7 +307,7 @@ export class Room extends Emitter {
   _tryJoin(code, ms = 20000) {
     return openPeer(null).catch(() => null).then(peer => new Promise((resolve, reject) => {
       if (this.closed) { if (peer) { try { peer.destroy(); } catch { } } return reject(netErr('closed', 'Closed')); }
-      const hello = { t: 'hello', v: E.PROTO, pid: this.me.pid, tab: this.me.tab, name: this.me.name, av: this.me.av };
+      const hello = { t: 'hello', v: E.PROTO, pid: this.me.pid, tab: this.me.tab, name: this.me.name, av: this.me.av, ach: this.me.ach };
       const relay = new RelayGuest(code).prepare();
       let rtc = null, path = null, joined = false, failed = false, slow = 0, relayWhy = '';
       this._t(`join ${code}${peer ? '' : ' (no matchmaking service)'}`);
