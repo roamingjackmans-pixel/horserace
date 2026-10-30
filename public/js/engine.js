@@ -2,9 +2,9 @@
 // Every function here is plain data in, plain data out, so it also runs under Node for tests.
 import { NAMES } from './names.js';
 import { cleanLook, isCustom } from './looks.js';
-import { simulate, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
+import { writeRace, playRace, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
 
-export const PROTO = 7;               // bump when the message format, rules or race simulation change
+export const PROTO = 8;               // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
@@ -234,9 +234,11 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       if (!Object.keys(s.picks).length) return { ok: false, err: 'Nobody has bet yet' };
       const seed = Math.floor(rand() * 4294967296) >>> 0;
       const gates = gatesOf(s);
-      const sim = simulate(seed, s.horses.length, gates);
+      // the whole race is written now (every hop, stop, boost and setback); everyone just plays it out
+      const written = writeRace(seed, s.horses.length, gates);
+      const sim = playRace(written, s.horses.length, gates);
       const startAt = now + COUNTDOWN * 1000;
-      s.race = { seed, n: s.horses.length, gates, startAt, endsAt: startAt + Math.ceil((sim.endT + 1) * 1000), winner: sim.winner, order: sim.order };
+      s.race = { seed, n: s.horses.length, gates, startAt, endsAt: startAt + Math.ceil((sim.endT + 1) * 1000), winner: written.winner, order: written.order, bolt: written.bolt, script: written.script };
       s.phase = 'racing';
       const bettors = Object.keys(s.picks).length;
       log(s, `Race ${s.raceNo} is off! ${gates} gates, ${bettors} ${bettors === 1 ? 'bet' : 'bets'} placed`);

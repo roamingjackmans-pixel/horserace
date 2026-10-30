@@ -30,6 +30,15 @@ ridiculous horses, and dish out penalties to your friends when you win.
   moment: **one horse is boosted forward one gate and a different one is set back one gate**.
 - No horse gets more boosts, or more setbacks, than **30% of the gates, rounded up**: 3 each on 7 gates, 6 on
   20, 30 on 100. (If every horse is already at its cap, the race doesn't stop at that gate.)
+- **No runaways.** Each horse can hop forward at most **110% of the gates, rounded up** (22 hops on 20 gates).
+  Boosts don't use up hops, but setbacks still cost ground: a horse set back 5 times on 20 gates can only
+  reach gate 17 unless it's boosted. And until someone finishes, the leader is never more than **25% of the
+  gates, rounded up** (5 on 20 gates) ahead of second place; the die simply won't pick a move that breaks
+  either rule. If no horse is allowed to move at all, the one furthest ahead wins and bolts for the line
+  (this essentially never happens).
+- **Every race is written before it's run.** When the host starts a race, the game writes out the whole thing
+  (every hop, stop, boost and setback, in order) and stores that script with the race; every screen then plays
+  the same script. `node tools/simstats.mjs` checks every rule after every action of thousands of races.
 - Horses that cross the finish line keep galloping, right off the screen. Then the results open on a
   **podium**: the winner reared up on it holding a trophy and cheering, everyone else standing sadly at the
   bottom. The host clicks **Next race** to go on to the next race.

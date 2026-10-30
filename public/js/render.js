@@ -335,7 +335,8 @@ export class TrackView {
     const horsePx = laneH * 1.2;
     const sc = (laneH * 0.92) / 92;
     // a horse over the line keeps galloping, faster and faster, off the right of the screen
-    const runOff = (i, at) => { const d = at - race.fin[i]; return G + d * (3 + 6 * d); };
+    // (from the line, or from wherever a winner-by-default was standing when it bolted)
+    const runOff = (i, at) => { const d = at - race.fin[i]; return (race.finPos && race.finPos[i] >= 0 ? race.finPos[i] : G) + d * (3 + 6 * d); };
     const over = i => race.fin[i] >= 0 && t > race.fin[i];
     const shown = pos.map((p, i) => (over(i) ? runOff(i, t) : p));
     const shownPrev = prev.map((p, i) => (race.fin[i] >= 0 && t - 0.08 > race.fin[i] ? runOff(i, t - 0.08) : p));

@@ -2,7 +2,7 @@
 // turns taps into actions.
 import { Room, cleanCode } from './net.js';
 import * as E from './engine.js';
-import { simulate, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, eventAt, gatesClearedAt } from './sim.js';
+import { simulate, playRace, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, hopCap, leadCap, eventAt, gatesClearedAt } from './sim.js';
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { PodiumView } from './podium.js';
@@ -425,7 +425,7 @@ function renderBetting(s) {
            <div class="quick presets"><button data-hrandom>🎲 Random ${E.RANDOM_MIN}–${E.RANDOM_MAX}</button></div>`
       : `<b class="gcount">${hn} horses</b>`}
       </div>
-      <div class="track-note">Max <b>${cap} boosts</b> and <b>${cap} setbacks</b> per horse (30% of the gates) · races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
+      <div class="track-note">Each horse gets up to <b>${hopCap(G)} hops</b>, <b>${cap} boosts</b> and <b>${cap} setbacks</b>, and the leader can never be more than <b>${leadCap(G)} gates</b> ahead of 2nd · races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
     </div>`;
   const cards = s.horses.map((h, i) => {
     const bs = E.backers(s, i);
@@ -622,7 +622,10 @@ function getSim(race) {
   const k = `${race.seed}:${race.n}:${race.gates || 20}`;
   let sim = ui.sims.get(k);
   if (!sim) {
-    sim = simulate(race.seed, race.n, race.gates || 20);
+    // play out the race exactly as the host wrote it (older hosts only sent the seed)
+    sim = race.script
+      ? playRace({ script: race.script, winner: race.winner, order: race.order, bolt: race.bolt }, race.n, race.gates || 20)
+      : simulate(race.seed, race.n, race.gates || 20);
     ui.sims.set(k, sim);
     if (ui.sims.size > 4) ui.sims.delete(ui.sims.keys().next().value);
   }
@@ -705,7 +708,7 @@ function raceFrame() {
     if (crossed(sim.fin[w])) {
       sfx.cheer();
       if (mine) setTimeout(() => (mine.h === w ? sfx.win() : sfx.lose()), 600);
-      comment(`🏆 ${hname(s, w)} crosses the line first!`);
+      comment(sim.bolt ? `🏆 Nobody else can move! ${hname(s, w)} is furthest ahead and bolts for the line!` : `🏆 ${hname(s, w)} crosses the line first!`);
     }
   }
   if (banner !== R.banner) {
