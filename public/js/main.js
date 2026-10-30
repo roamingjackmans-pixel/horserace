@@ -2,7 +2,7 @@
 // turns taps into actions.
 import { Room, cleanCode } from './net.js';
 import * as E from './engine.js';
-import { simulate, GATES, BOOST_AT, SETBACK_AT, eventAt, gatesClearedAt } from './sim.js';
+import { simulate, GATES, BOOST_AT, SETBACK_AT, MAX_BOOSTS, MAX_SETBACKS, eventAt, gatesClearedAt, tallyAt } from './sim.js';
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { sfx, unlock, isMuted, setMuted } from './audio.js';
@@ -335,14 +335,14 @@ function renderPlayers(s) {
     else if (s.phase === 'results' && s.res) {
       const po = s.res.payouts.find(x => x.pid === id);
       if (po && po.win) status = s.res.done[id] ? `🏆 Won ${po.bet} chips` : `🏆 Won ${po.bet} chips · picking victims…`;
-      else if (po) status = `#${po.h + 1} lost`;
+      else if (po) status = `#${po.h + 1} lost · took ${plural(po.bet, 'penalty', 'penalties')}`;
       else status = 'Sat this one out';
     }
     return `<div class="player ${id === pid ? 'me' : ''} ${p.on ? '' : 'off'}">
       <div class="pav">${esc(p.av)}</div>
       <div class="pbody">
         <div class="pname">${esc(p.name)}${id === s.hostPid ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? '' : '<span class="tag away">AWAY</span>'}</div>
-        <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>💥 <b>${p.given}</b> penalties given</span><span>🤕 <b>${p.taken}</b> taken</span></div>
+        <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>🤕 <b>${p.taken}</b> penalties</span></div>
         ${status ? `<div class="pstatus">${status}</div>` : ''}
       </div>
       ${isHost && !p.on ? `<button class="premove" data-remove="${esc(id)}" title="Remove from the lobby">✕</button>` : ''}
@@ -416,7 +416,7 @@ function renderBetting(s) {
   }).join('');
   const betCount = Object.keys(s.picks).filter(id => s.players[id] && s.players[id].on).length;
   const summary = mine
-    ? `You're betting <b>${plural(mine.bet, 'chip')}</b> on <b>#${mine.h + 1} ${esc(s.horses[mine.h].name)}</b>. If it wins you get ${plural(mine.bet, 'chip')} and <b>${mine.bet * E.PENALTY_MULT} penalties</b> to hand out.`
+    ? `You're betting <b>${plural(mine.bet, 'chip')}</b> on <b>#${mine.h + 1} ${esc(s.horses[mine.h].name)}</b>. If it wins you get ${plural(mine.bet, 'chip')} and <b>${mine.bet * E.PENALTY_MULT} penalties</b> to hand out. If it loses, you take <b>${plural(mine.bet, 'penalty', 'penalties')}</b>.`
     : 'Tap a horse to bet on it.';
   const hostName = esc(pname(s, s.hostPid));
   $('#stage').innerHTML = `<div class="card panel">
@@ -570,15 +570,17 @@ function raceFrame() {
     // phones get a one-line version so it doesn't cover the horses (the commentary below has the names)
     const narrow = window.innerWidth < 600;
     banner = narrow ? `<div class="big">🚧 Gate ${e.gate}! FREEZE!</div>` : `<div class="big">🚧 Everyone's through gate ${e.gate}! FREEZE!</div>`;
-    if (ev.pt >= BOOST_AT) banner += `<div class="boost">⚡ ${narrow ? `#${e.boost + 1}` : esc(hname(s, e.boost))} +1 gate</div>`;
-    if (ev.pt >= SETBACK_AT) banner += `<div class="setback">🐌 ${narrow ? `#${e.setback + 1}` : esc(hname(s, e.setback))} −1 gate</div>`;
+    // (a horse that has had 6 boosts or 6 setbacks this race can't get another; -1 means nobody was eligible)
+    const hasBoost = e.boost >= 0, hasSetback = e.setback >= 0;
+    if (ev.pt >= BOOST_AT && hasBoost) banner += `<div class="boost">⚡ ${narrow ? `#${e.boost + 1}` : esc(hname(s, e.boost))} +1 gate</div>`;
+    if (ev.pt >= SETBACK_AT && hasSetback) banner += `<div class="setback">🐌 ${narrow ? `#${e.setback + 1}` : esc(hname(s, e.setback))} −1 gate</div>`;
     if (crossed(e.t)) { sfx.freeze(); comment(`Everyone made it through gate ${e.gate}. FREEZE!`); }
-    if (crossed(e.t + BOOST_AT)) { sfx.boost(); comment(`⚡ Boost! ${hname(s, e.boost)} jumps forward a gate!`); }
-    if (crossed(e.t + SETBACK_AT)) { sfx.setback(); comment(`🐌 Ouch! ${hname(s, e.setback)} gets sent back a gate!`); }
+    if (hasBoost && crossed(e.t + BOOST_AT)) { sfx.boost(); comment(`⚡ Boost! ${hname(s, e.boost)} jumps forward a gate!`); }
+    if (hasSetback && crossed(e.t + SETBACK_AT)) { sfx.setback(); comment(`🐌 Ouch! ${hname(s, e.setback)} gets sent back a gate!`); }
   }
   if (won) {
     const w = sim.winner;
-    banner = `<div class="big">🏆 ${esc(hname(s, w))} wins!</div>` + (mine ? (mine.h === w ? `<div class="boost">You won ${plural(mine.bet, 'chip')}!</div>` : `<div>Your horse came ${ordinal(sim.order.indexOf(mine.h) + 1)}.</div>`) : '');
+    banner = `<div class="big">🏆 ${esc(hname(s, w))} wins!</div>` + (mine ? (mine.h === w ? `<div class="boost">You won ${plural(mine.bet, 'chip')}!</div>` : `<div class="setback">Your horse came ${ordinal(sim.order.indexOf(mine.h) + 1)}. Take ${plural(mine.bet, 'penalty', 'penalties')}!</div>`) : '');
     if (crossed(sim.fin[w])) {
       sfx.cheer();
       if (mine) setTimeout(() => (mine.h === w ? sfx.win() : sfx.lose()), 600);
@@ -628,9 +630,13 @@ function updateStandings(force) {
     if (done(b)) return 1;
     return pos[b] - pos[a];
   });
+  const tally = tallyAt(sim, t);
   const html = order.map((i, k) => {
     const who = E.backers(s, i).map(id => esc(pav(s, id))).join('');
-    return `<div class="stand ${mine && mine.h === i ? 'mine' : ''}"><span class="place">${ordinal(k + 1)}</span><span class="chip" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span><span class="nm">${esc(s.horses[i].name)}</span><span class="who">${who}</span></div>`;
+    // boosts and setbacks so far (6 of either is the most a horse can get in one race)
+    const b = tally.boosts[i], sb = tally.setbacks[i];
+    const fx = `<span class="fx" title="${b} of ${MAX_BOOSTS} boosts, ${sb} of ${MAX_SETBACKS} setbacks"><span class="${b >= MAX_BOOSTS ? 'maxed' : ''}">⚡${b}</span><span class="${sb >= MAX_SETBACKS ? 'maxed' : ''}">🐌${sb}</span></span>`;
+    return `<div class="stand ${mine && mine.h === i ? 'mine' : ''}"><span class="place">${ordinal(k + 1)}</span><span class="chip" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span><span class="nm">${esc(s.horses[i].name)}</span>${fx}<span class="who">${who}</span></div>`;
   }).join('');
   if (html !== ui.race.stand || force) { ui.race.stand = html; $('#standings').innerHTML = html; }
 }
@@ -648,13 +654,13 @@ function renderResults(s) {
   const minePo = res.payouts.find(p => p.pid === pid);
   let headline;
   if (minePo && minePo.win) headline = `🎉 You won ${plural(minePo.bet, 'chip')}!`;
-  else if (minePo) headline = `Your horse #${minePo.h + 1} came ${ordinal(res.order.indexOf(minePo.h) + 1)}. No chips this time.`;
+  else if (minePo) headline = `Your horse #${minePo.h + 1} came ${ordinal(res.order.indexOf(minePo.h) + 1)}, so you take ${plural(minePo.bet, 'penalty', 'penalties')}.`;
   else headline = 'You sat this one out.';
   const backedBy = winners.length ? `Backed by ${winners.map(p => `${esc(pav(s, p.pid))} ${esc(pname(s, p.pid))} (+${p.bet})`).join(', ')}` : 'Nobody backed it, so nobody wins chips this race.';
 
   const order = res.order.map((h, k) => `<li><span class="pl">${ordinal(k + 1)}</span>${dot(h)}<span>#${h + 1} ${esc(s.horses[h].name)}</span></li>`).join('');
   const payouts = res.payouts.length
-    ? res.payouts.map(p => `<div class="payout"><span>${esc(pav(s, p.pid))} ${esc(pname(s, p.pid))}</span>${dot(p.h)}<span>#${p.h + 1}</span><span class="amt ${p.win ? 'win' : 'lose'}">${p.win ? `+${p.bet} chips` : `${p.bet} on a loser`}</span></div>`).join('')
+    ? res.payouts.map(p => `<div class="payout"><span>${esc(pav(s, p.pid))} ${esc(pname(s, p.pid))}</span>${dot(p.h)}<span>#${p.h + 1}</span><span class="amt ${p.win ? 'win' : 'lose'}">${p.win ? `+${p.bet} chips` : `🤕 ${plural(p.bet, 'penalty', 'penalties')}`}</span></div>`).join('')
     : '<div class="payout">No bets this race.</div>';
 
   // penalty panel for me

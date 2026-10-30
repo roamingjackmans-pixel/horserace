@@ -268,7 +268,7 @@ export class TrackView {
     if (ev) {
       const { pt } = ev;
       const spin = (target, from, to, color) => {
-        if (pt < from || pt > to + 0.9) return;
+        if (target < 0 || pt < from || pt > to + 0.9) return;   // -1: no horse was eligible (all at their limit)
         let lane = target;
         if (pt < to) {
           const ticks = Math.floor(((pt - from) / (to - from)) ** 0.6 * 9 * n);

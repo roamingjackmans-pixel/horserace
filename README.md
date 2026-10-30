@@ -13,10 +13,13 @@ ridiculous horses, and dish out penalties to your friends when you win.
   **first person to pick it can rename it**.
 - The track has **20 evenly spaced gates** (gate 20 is the finish line). Every time **all** the horses make it
   through the next gate for the first time, every horse stops for a moment: **one horse is boosted forward one
-  gate and a different one is set back one gate**.
+  gate and a different one is set back one gate**. No horse gets more than **6 boosts or 6 setbacks** in one
+  race (the live standings show each horse's ⚡ and 🐌 count).
 - If your horse wins, you **win the chips you bet**, and you get **twice your bet in penalties** to hand out to
   anyone else, split however you like. Everyone you hit gets a popup saying you attacked them.
-- Under each player's name the lobby keeps a running tally of **chips won, penalties given and penalties taken**.
+- If your horse loses, you **take penalties equal to your bet**.
+- Under each player's name the lobby keeps a running tally of **chips won and penalties taken** (from lost bets
+  and from attacks).
 
 ## How online play works
 

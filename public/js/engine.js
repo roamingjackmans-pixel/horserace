@@ -3,7 +3,7 @@
 import { NAMES } from './names.js';
 import { simulate, COUNTDOWN } from './sim.js';
 
-export const PROTO = 1;               // bump when the message format or the race simulation changes
+export const PROTO = 2;               // bump when the message format, rules or race simulation change
 export const MIN_BET = 1;
 export const MAX_BET = 20;
 export const PENALTY_MULT = 2;        // winners dish out 2x their bet in penalties
@@ -76,7 +76,7 @@ export function addPlayer(s, p) {
   }
   const online = s.order.filter(id => s.players[id].on).length;
   if (online >= MAX_PLAYERS) return { ok: false, err: `This lobby is full (${MAX_PLAYERS} players)` };
-  s.players[pid] = { pid, name, av, n: ++s.joinSeq, on: true, chips: 0, wins: 0, given: 0, taken: 0, races: 0 };
+  s.players[pid] = { pid, name, av, n: ++s.joinSeq, on: true, chips: 0, wins: 0, taken: 0, races: 0 };
   s.order.push(pid);
   log(s, `${name} joined`);
   return { ok: true, back: false };
@@ -201,7 +201,6 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       s.res.done[pid] = true;
       const attack = { id: `r${s.raceNo}-${pid}`, from: pid, hits, total };
       s.res.attacks.push(attack);
-      me.given += total;
       for (const [target, n] of Object.entries(hits)) s.players[target].taken += n;
       if (total) {
         const list = Object.entries(hits).map(([t, n]) => `${s.players[t].name} (${n})`).join(', ');
@@ -244,6 +243,10 @@ export function tick(s, now = Date.now()) {
   return false;
 }
 
+/**
+ * The race is over. Winners win the chips they bet and get 2x their bet in penalties to hand out.
+ * Everyone who backed a losing horse takes penalties equal to their bet.
+ */
 export function finishRace(s) {
   const w = s.race.winner;
   const payouts = [], pools = {};
@@ -254,12 +257,14 @@ export function finishRace(s) {
     payouts.push({ pid, h: p.h, bet: p.bet, win });
     pl.races++;
     if (win) { pl.chips += p.bet; pl.wins++; pools[pid] = p.bet * PENALTY_MULT; }
+    else pl.taken += p.bet;
   }
   s.res = { winner: w, order: s.race.order, payouts, pools, done: {}, attacks: [] };
   s.phase = 'results';
-  const winners = payouts.filter(p => p.win);
+  const winners = payouts.filter(p => p.win), losers = payouts.filter(p => !p.win);
   log(s, `#${w + 1} ${s.horses[w].name} won race ${s.raceNo}! ` +
     (winners.length ? `Chips to ${winners.map(p => `${s.players[p.pid].name} (+${p.bet})`).join(', ')}` : 'Nobody backed it.'));
+  if (losers.length) log(s, `Lost bets, penalties taken: ${losers.map(p => `${s.players[p.pid].name} (${p.bet})`).join(', ')}`);
 }
 
 /** Winners who still have penalties to hand out. */

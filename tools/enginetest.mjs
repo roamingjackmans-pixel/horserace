@@ -25,13 +25,15 @@ s.race.winner = 0;
 ok(E.tick(s, s.race.endsAt) && s.phase === 'results', 'race ends');
 ok(s.players.A.chips === 20 && s.players.B.chips === 7 && s.players.C.chips === 0, 'chips paid only to winners');
 ok(s.res.pools.A === 40 && s.res.pools.B === 14 && !s.res.pools.C, 'penalty pools are 2x bet');
+ok(s.players.C.taken === 3 && s.players.A.taken === 0 && s.players.B.taken === 0, 'loser takes penalties equal to the bet, winners take none');
+ok(!('given' in s.players.A), 'penalties given are not tracked');
 ok(!E.apply(s, 'C', { k: 'attack', hits: { A: 1 } }).ok, 'loser cannot attack');
 ok(!E.apply(s, 'B', { k: 'attack', hits: { C: 15 } }).ok, 'cannot exceed pool');
 ok(!E.apply(s, 'B', { k: 'attack', hits: { B: 1 } }).ok, 'cannot hit yourself');
 const r = E.apply(s, 'B', { k: 'attack', hits: { C: 10, A: 4 } });
 ok(r.ok && r.attack.total === 14, 'B attacks C and A');
 ok(!E.apply(s, 'B', { k: 'attack', hits: { C: 1 } }).ok, 'cannot attack twice');
-ok(s.players.B.given === 14 && s.players.C.taken === 10 && s.players.A.taken === 4, 'tallies');
+ok(s.players.C.taken === 13 && s.players.A.taken === 4 && s.players.B.taken === 0, 'tallies: lost bet + attacks add up');
 ok(E.pendingAttackers(s).join() === 'A', 'A still pending');
 ok(E.apply(s, 'A', { k: 'attack', hits: {} }).ok && E.pendingAttackers(s).length === 0, 'mercy');
 ok(!E.apply(s, 'B', { k: 'next' }).ok, 'non-host cannot advance');
@@ -48,7 +50,8 @@ ok(E.apply(s, 'B', { k: 'remove', pid: 'C' }).ok && !s.players.C, 'remove offlin
 // a race with nobody on the winner
 E.apply(s, 'A', { k: 'pick', h: 0, bet: 3 });
 E.apply(s, 'B', { k: 'start' }, 5000); s.race.winner = 1; E.tick(s, s.race.endsAt);
-ok(Object.keys(s.res.pools).length === 0, 'no winners, no penalties');
+ok(Object.keys(s.res.pools).length === 0, 'no winners, no penalties to hand out');
+ok(s.players.A.taken === 7, 'everyone who bet still takes their bet in penalties when nobody wins');
 ok(JSON.stringify(s).length < 6000, 'state stays small: ' + JSON.stringify(s).length + ' bytes');
 console.log(fails ? `${fails} failed` : 'all engine checks passed');
 process.exit(fails ? 1 : 0);

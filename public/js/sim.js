@@ -5,6 +5,7 @@
 // Positions are measured in gates: the horses start at 0, gate k sits at k, and gate 20 is the finish line.
 // Whenever every horse has made it through the next gate for the first time, all horses stop for PAUSE
 // seconds: one random horse is boosted forward one gate and a different one is set back one gate.
+// No horse gets more than MAX_BOOSTS boosts or MAX_SETBACKS setbacks in one race.
 
 export const GATES = 20;
 export const DT = 1 / 30;            // simulation step (seconds)
@@ -15,6 +16,8 @@ export const SETBACK_AT = 1.02;      // ...and when the set-back horse starts sl
 export const SETBACK_LEN = 0.45;
 export const AFTER_WIN = 4;          // keep the rest running this long after the winner crosses the line
 export const COUNTDOWN = 4;          // seconds between "start" and the gates opening
+export const MAX_BOOSTS = 6;         // per horse, per race
+export const MAX_SETBACKS = 6;       // per horse, per race
 
 /** Small, fast, seeded random number generator (mulberry32). Integer math only. */
 export function rng(seed) {
@@ -35,15 +38,17 @@ const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
  * Runs the whole race up front.
  * Returns { n, steps, frames, events, winner, order, fin, endT }
  *  frames: Float32Array, frames[step * n + i] = position of horse i at time step * DT
- *  events: [{ t, gate, boost, setback }] — t is when the horses froze
+ *  events: [{ t, gate, boost, setback }] — t is when the horses froze; boost/setback is a horse index,
+ *          or -1 when every eligible horse has already used up its 6 (only possible in very long races)
  *  fin[i]: time horse i crossed the finish line (-1 if it never did)
  */
 export function simulate(seed, n) {
   const r = rng(seed);
   const H = [];
   for (let i = 0; i < n; i++) {
-    H.push({ pos: 0, v: 0, base: 0.92 + r() * 0.14, mood: 0.9 + r() * 0.2, moodLeft: 0.3 + r() * 1.2, fin: -1 });
+    H.push({ pos: 0, v: 0, base: 0.92 + r() * 0.14, mood: 0.9 + r() * 0.2, moodLeft: 0.3 + r() * 1.2, fin: -1, boosts: 0, setbacks: 0 });
   }
+  const pickFrom = list => (list.length ? list[Math.floor(r() * list.length)] : -1);
   const maxSteps = Math.ceil(240 / DT);
   const frames = new Float32Array(maxSteps * n);
   const events = [];
@@ -93,9 +98,12 @@ export function simulate(seed, n) {
         let min = H[0].pos;
         for (let i = 1; i < n; i++) if (H[i].pos < min) min = H[i].pos;
         if (min >= nextGate) {
-          const boost = Math.floor(r() * n);
-          let setback = Math.floor(r() * (n - 1));
-          if (setback >= boost) setback++;
+          // only horses that haven't hit their limit can be picked
+          const all = H.map((h, i) => i);
+          const boost = pickFrom(all.filter(i => H[i].boosts < MAX_BOOSTS));
+          const setback = pickFrom(all.filter(i => i !== boost && H[i].setbacks < MAX_SETBACKS));
+          if (boost >= 0) H[boost].boosts++;
+          if (setback >= 0) H[setback].setbacks++;
           pause = { t0: t, from: H.map(h => h.pos), boost, setback };
           events.push({ t, gate: nextGate, boost, setback });
           nextGate++;
@@ -141,6 +149,17 @@ export function eventAt(race, t) {
     if (ev.t > t) break;
   }
   return null;
+}
+
+/** Boosts and setbacks each horse has taken by time t: { boosts: [..], setbacks: [..] } */
+export function tallyAt(race, t) {
+  const boosts = new Array(race.n).fill(0), setbacks = new Array(race.n).fill(0);
+  for (const ev of race.events) {
+    if (ev.t > t) break;
+    if (ev.boost >= 0 && t >= ev.t + BOOST_AT) boosts[ev.boost]++;
+    if (ev.setback >= 0 && t >= ev.t + SETBACK_AT) setbacks[ev.setback]++;
+  }
+  return { boosts, setbacks };
 }
 
 /** How many gate events have started by time t (gates every horse has cleared). */
