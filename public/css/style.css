@@ -406,3 +406,22 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--red); flex: 1 1 1
   .logo-horse, .status { animation: none; }
   .attack-modal { animation: pop-in .2s ease-out; }
 }
+
+/* ---------- connection check ---------- */
+.check-logo { font-size: clamp(32px, 9vw, 48px); text-align: center; }
+.check .home-card > input { margin-bottom: 14px; font-size: 20px; letter-spacing: .2em; text-align: center; font-weight: 600; }
+.check .home-card > input::placeholder { letter-spacing: normal; font-size: 16px; font-weight: 400; }
+.verdict { margin: 16px 0 4px; padding: 12px 14px; border-radius: 14px; font-weight: 600; line-height: 1.35; background: var(--card-2); }
+.verdict.ok { background: #e3f4e8; color: #145f2e; }
+.verdict.warn { background: #fff1cf; color: #6b4a00; }
+.verdict.bad { background: #fde3de; color: #8a1f10; }
+.checks { list-style: none; margin: 12px 0 0; padding: 0; }
+.checks li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px dashed var(--line); }
+.checks .ic { flex: 0 0 24px; font-size: 18px; line-height: 1.3; text-align: center; }
+.checks b { display: block; font-size: 16px; }
+.checks .det { font-size: 14px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+.check-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.check-actions .btn { flex: 1 1 140px; }
+.check-report { width: 100%; min-height: 160px; margin-top: 12px; font: 12px/1.4 ui-monospace, Consolas, monospace; border: 2px solid var(--line); border-radius: 12px; padding: 8px; color: var(--ink); background: #fff; }
+.check-link { display: block; margin-top: 12px; text-align: center; font-size: 14px; color: var(--muted); }
+.tag.relay { background: var(--blue); }

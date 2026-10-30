@@ -54,6 +54,8 @@ const ui = {
   saveTimer: 0,
 };
 const me = () => ui.room && ui.room.me;
+// in the browser console: hrTrace() shows how this tab's connection went
+window.hrTrace = () => (ui.room && ui.room.trace ? ui.room.trace.join(' | ') : '');
 const myPid = () => (ui.room ? ui.room.me.pid : null);
 const pname = (s, pid) => (s.players[pid] ? s.players[pid].name : 'Someone');
 const pav = (s, pid) => (s.players[pid] ? s.players[pid].av : '❔');
@@ -177,6 +179,7 @@ async function joinLobby(raw) {
       unbindRoom(room);
       if (e.code === 'dup' && attempt === 0) { pid = rid(); tabStore.set('hr_pid', pid); continue; }
       homeMsg(e.message || 'Could not join that lobby');
+      $('#checkLink').href = `check.html?room=${code}`;
       break;
     }
   }
@@ -193,6 +196,7 @@ function bindRoom(room) {
     room.on('status', t => { const el = $('#status'); el.hidden = !t; el.textContent = t || ''; }),
     room.on('error', msg => toast(msg, 'err')),
     room.on('toast', msg => toast(msg, 'good')),
+    room.on('progress', msg => { if (!$('#home').hidden) homeMsg(msg, true); }),
     room.on('role', () => { ui.stageKey = ''; if (ui.state) render(); }),
     room.on('closed', msg => onClosed(msg)),
   ];
@@ -326,7 +330,7 @@ function render() {
 function renderPlayers(s) {
   const pid = myPid(), isHost = s.hostPid === pid;
   const online = s.order.filter(id => s.players[id] && s.players[id].on).length;
-  $('#playerCount').textContent = `${online} here${s.order.length > online ? `, ${s.order.length - online} away` : ''}`;
+  $('#playerCount').textContent = `${online}/${E.MAX_PLAYERS} here${s.order.length > online ? `, ${s.order.length - online} away` : ''}`;
   $('#players').innerHTML = s.order.map(id => {
     const p = s.players[id];
     if (!p) return '';
@@ -343,7 +347,7 @@ function renderPlayers(s) {
     return `<div class="player ${id === pid ? 'me' : ''} ${p.on ? '' : 'off'}">
       <div class="pav">${esc(p.av)}</div>
       <div class="pbody">
-        <div class="pname">${esc(p.name)}${id === s.hostPid ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? '' : '<span class="tag away">AWAY</span>'}</div>
+        <div class="pname">${esc(p.name)}${id === s.hostPid ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? (p.relay ? '<span class="tag relay" title="Connected through the backup relay (a direct connection didn\'t work for them)">📡 RELAY</span>' : '') : '<span class="tag away">AWAY</span>'}</div>
         <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>🤕 <b>${p.taken}</b> penalties</span></div>
         ${status ? `<div class="pstatus">${status}</div>` : ''}
       </div>

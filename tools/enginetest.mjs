@@ -113,5 +113,17 @@ E.apply(s, 'B', { k: 'start' }, 5000); s.race.winner = 1; E.tick(s, s.race.endsA
 ok(Object.keys(s.res.pools).length === 0, 'no winners, no penalties to hand out');
 ok(s.players.A.taken === 7, 'everyone who bet still takes their bet in penalties when nobody wins');
 ok(JSON.stringify(s).length < 6000, 'state stays small: ' + JSON.stringify(s).length + ' bytes');
+// up to 8 players online at once; seats of players who left don't count, but they can't come back into a full lobby
+{
+  const t = E.newRoom('54321', { pid: 'h', name: 'Host' }, 1000);
+  for (let i = 1; i < E.MAX_PLAYERS; i++) ok(E.addPlayer(t, { pid: 'p' + i, name: 'P' + i, relay: i === 3 }).ok, `player ${i + 1} joins`);
+  ok(E.MAX_PLAYERS === 8, 'lobby max is 8');
+  ok(t.players.p3.relay === true && t.players.p2.relay === false, 'relayed players are marked');
+  ok(!E.addPlayer(t, { pid: 'p9', name: 'Nine' }).ok, 'a 9th player is turned away');
+  E.setOnline(t, 'p1', false);
+  ok(E.addPlayer(t, { pid: 'p9', name: 'Nine' }).ok, 'a seat opens when someone leaves');
+  ok(!E.addPlayer(t, { pid: 'p1', name: 'P1' }).ok, 'the player who left can not squeeze back into a full lobby');
+  ok(E.addPlayer(t, { pid: 'p2', name: 'P2' }).ok, 'someone already here reconnecting is fine');
+}
 console.log(fails ? `${fails} failed` : 'all engine checks passed');
 process.exit(fails ? 1 : 0);

@@ -15,12 +15,13 @@ const info = { version: pkg.version, commit, built };
 
 fs.writeFileSync(path.join(root, 'version.js'), `// Build stamp (written at deploy time).\nwindow.HR_VERSION = ${JSON.stringify(info)};\n`);
 
-const indexPath = path.join(root, 'index.html');
-let html = fs.readFileSync(indexPath, 'utf8');
 let n = 0;
-html = html.replace(/(<(?:script|link)\b[^>]*?\s(?:src|href)=")((?!https?:|data:|\/\/)[^"?#]+\.(?:js|css))(")/g,
-  (m, a, url, b) => { n++; return `${a}${url}?v=${commit}${b}`; });
-fs.writeFileSync(indexPath, html);
+for (const page of fs.readdirSync(root).filter(f => f.endsWith('.html'))) {   // index.html, check.html
+  const p = path.join(root, page);
+  const html = fs.readFileSync(p, 'utf8').replace(/(<(?:script|link)\b[^>]*?\s(?:src|href)=")((?!https?:|data:|\/\/)[^"?#]+\.(?:js|css))(")/g,
+    (m, a, url, b) => { n++; return `${a}${url}?v=${commit}${b}`; });
+  fs.writeFileSync(p, html);
+}
 
 let m = 0;
 const d = path.join(root, 'js');

@@ -7,7 +7,8 @@ ridiculous horses, and dish out penalties to your friends when you win.
 
 ## The rules
 
-- One person **makes a lobby** and shares its **5-number code** (or the invite link, `?room=CODE`).
+- One person **makes a lobby** and shares its **5-number code** (or the invite link, `?room=CODE`). Up to
+  **8 players** can be in a lobby at once (seats of players who left don't count).
 - A lobby starts with **4 to 6 horses**, each with one of **200 funny names**. The **same horses race every
   round**: names, looks, and everyone's pick and bet all carry over (change your pick any time before the
   start). The host can set **2 to 8 horses** (or roll a random 4–6): new horses join at the end, and taking
@@ -56,7 +57,33 @@ ridiculous horses, and dish out penalties to your friends when you win.
 There is no game server. The person who makes the lobby is the **host**: their browser runs the rules
 (`public/js/engine.js`) and sends the lobby state to everyone else. Players connect straight to the host's
 browser (WebRTC) through the free public [PeerJS](https://peerjs.com) matchmaking service; the lobby code is
-the host's PeerJS id (`jjhorserace-v1-<code>`). PeerJS's free TURN relay is the fallback for strict networks.
+the host's PeerJS id (`jjhorserace-v1-<code>`).
+
+**The backup relay.** Some phones and networks can't make that direct connection: mobile data behind carrier
+NAT, VPNs, privacy or ad-blocking settings, some in-app browsers. (PeerJS's own free TURN relay, which used to
+cover this, has shut down: `eu-0`/`us-0.turn.peerjs.com` no longer resolve.) So `public/js/relay.js` carries
+the same messages through free public MQTT servers over ordinary secure websockets (EMQX, shiftr.io on port
+443, HiveMQ), which work wherever a web page works:
+
+- The host always listens on every relay server as well as for direct connections.
+- A joining player tries direct first. If it fails, or hasn't opened within 6 seconds, they say hello through
+  the relay instead (repeating it every 2 s until a host answers), and stick with whichever server and host
+  answer first.
+- A player who ended up on the relay only because the direct connection was slow tries direct again 8 and 45
+  seconds later and switches over if it works.
+- Relayed players show a 📡 RELAY tag in the lobby, and go to the back of the line for taking over hosting.
+- A phone that can't even reach the PeerJS matchmaking service can still join through the relay (it just
+  can't host).
+
+Messages through the public relay servers aren't private (only game data goes through them: names, picks,
+bets). Add `?forcerelay` to the page address to test the relay on one computer.
+
+**Connection check.** `check.html` (linked under the Join button as "Can't get in? Run a connection check")
+tests, on the player's own phone: the browser, whether direct connections work and what kind of network it is,
+the matchmaking service, each relay server, and optionally a real lobby both ways (the host answers a `probe`
+message without adding anyone). It ends with a plain-language verdict and a **Copy the results** button, so a
+player who can't get in can send exactly what's blocked. In the browser console of the game, `hrTrace()` shows
+how that tab's connection went.
 
 Races are deterministic: the host only sends a random seed, and every browser simulates exactly the same race
 from it (`public/js/sim.js` sticks to `+ - * /` so all devices agree to the last bit).
@@ -79,7 +106,7 @@ and join the code. (Tabs in one browser share the saved name, so rename yourself
 ## Tests
 
 ```bash
-node tools/enginetest.mjs     # the rules: picks, rename rights, payouts, penalty limits, host takeover
+node tools/enginetest.mjs     # the rules: picks, rename rights, payouts, penalty limits, 8-player cap
 node tools/simstats.mjs 3000  # race length, gate stops per race, lane fairness, determinism
 ```
 
@@ -95,8 +122,11 @@ the version and adds `?v=<commit>` to every file URL so phones never mix old and
 ```
 public/              the game (this folder is what gets published)
   index.html, css/style.css, version.js
+  check.html         the connection check page
   js/main.js         screens, buttons, race playback, popups
   js/net.js          PeerJS lobby: host, join, reconnect, host handover
+  js/relay.js        the backup relay through public MQTT servers
+  js/check.js        the connection check
   js/engine.js       lobby state and rules (host only)
   js/sim.js          deterministic race simulation
   js/render.js       canvas track and cartoon horses

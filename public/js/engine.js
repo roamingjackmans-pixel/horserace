@@ -10,7 +10,7 @@ export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
 export const MAX_BET = 20;
 export const PENALTY_MULT = 2;        // winners dish out 2x their bet in penalties
-export const MAX_PLAYERS = 16;
+export const MAX_PLAYERS = 8;         // players online at once (seats of players who left don't count)
 // A lobby starts with 4 to 6 horses at random. The host can set any number from 2 to 8 (or roll a random 4-6).
 // The same horses race every round (names, looks and everyone's pick all carry over); adding horses puts new
 // ones on the end, removing takes them off the end.
@@ -80,15 +80,17 @@ export function addPlayer(s, p) {
   const name = clean(p.name, 20) || 'Mystery Guest';
   const av = clean(p.av, 8) || '🐴';
   const old = s.players[pid];
+  const online = s.order.filter(id => s.players[id].on).length;
+  const full = { ok: false, err: `This lobby is full (${MAX_PLAYERS} players max)` };
   if (old) {
     const back = !old.on;
-    old.on = true; old.name = name; old.av = av;
+    if (back && online >= MAX_PLAYERS) return full;
+    old.on = true; old.name = name; old.av = av; old.relay = !!p.relay;
     if (back && !(s.quietUntil > Date.now())) log(s, `${name} is back`);
     return { ok: true, back };
   }
-  const online = s.order.filter(id => s.players[id].on).length;
-  if (online >= MAX_PLAYERS) return { ok: false, err: `This lobby is full (${MAX_PLAYERS} players)` };
-  s.players[pid] = { pid, name, av, n: ++s.joinSeq, on: true, chips: 0, wins: 0, taken: 0, races: 0 };
+  if (online >= MAX_PLAYERS) return full;
+  s.players[pid] = { pid, name, av, n: ++s.joinSeq, on: true, chips: 0, wins: 0, taken: 0, races: 0, relay: !!p.relay };
   s.order.push(pid);
   log(s, `${name} joined`);
   return { ok: true, back: false };

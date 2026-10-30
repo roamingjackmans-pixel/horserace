@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Connection check | Horse Race</title>
+  <meta name="description" content="Can't get into a Horse Race lobby? This checks what your phone and network allow.">
+  <meta name="theme-color" content="#0f3d2e">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="version.js"></script>
+  <script src="vendor/peerjs.min.js"></script>
+</head>
+<body>
+  <section class="screen home check">
+    <p class="site"><a href="./">← Back to Horse Race</a></p>
+    <h1 class="logo check-logo">📶 Connection check</h1>
+    <p class="tagline">Can't get into a lobby? This checks what your phone and network allow. It takes about 20 seconds.</p>
+    <div class="card home-card">
+      <label class="field-label" for="code">Lobby code (optional)</label>
+      <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" placeholder="Test against a friend's open lobby">
+      <button id="run" class="btn primary big" type="button">Run the check</button>
+      <div id="verdict" class="verdict" role="status" hidden></div>
+      <ul id="results" class="checks"></ul>
+      <div id="after" class="check-actions" hidden>
+        <button id="copy" class="btn gold" type="button">Copy the results</button>
+        <button id="again" class="btn" type="button">Run again</button>
+      </div>
+      <p id="copyMsg" class="msg ok"></p>
+    </div>
+    <p id="buildTag" class="build"></p>
+  </section>
+  <noscript><div style="padding:40px;text-align:center;color:#fff">The connection check needs JavaScript turned on.</div></noscript>
+  <script type="module" src="js/check.js"></script>
+</body>
+</html>
