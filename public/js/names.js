@@ -1,0 +1,51 @@
+// The 200 funny names a horse can show up with. Each race draws its horses' names from here at random.
+export const NAMES = [
+  'Hoof Hearted', 'Neigh Sayer', 'Usain Colt', 'The Mane Event', 'Sir Trots-a-Lot',
+  'Hay Girl Hay', 'Totally Unstable', 'Glue Factory Dropout', 'Saddle Up Buttercup', 'Galloping Gertrude',
+  'Mr. Hoofington', 'Forrest Gallop', 'Mane Attraction', 'Horse With No Plan', 'Clip Clop Kevin',
+  'Spaghetti Legs', 'Wet Noodle', 'Sir Neighs-a-Lot', 'Pony Soprano', 'Hay Fever',
+  'Thunder Thighs', 'Carrot Cake Crusader', 'Oat Couture', 'Whinny The Pooh', 'Mayonnaise Tornado',
+  'Legs McGee', 'Turbo Potato', 'Nacho Average Horse', 'Fast And Hay-rious', 'Lettuce Win',
+  'Neighpoleon Bonaparte', 'Count Hoofula', 'Doctor Hoof', 'Captain Clip-Clop', 'Sugar Cube Junkie',
+  'Pasta La Vista', 'Gravy Train', 'Sock Puppet', 'Wobbly Bob', 'Buttered Lightning',
+  'Professor Neigh', 'Horsey McHorseface', 'Tater Trot', 'Mane Squeeze', 'Hoofed On A Feeling',
+  'Taco Tuesday', 'Dances With Hooves', 'The Flying Burrito', 'Bad Hair Day', 'Mr. Wiggles',
+  'Pickle Surprise', 'Lightning McSnooze', 'Snack Attack', 'Bagel Bandit', 'Grumpy Gallops',
+  'Nervous Nelly', 'Chicken Nugget', 'Rocket Llama', 'Definitely A Horse', 'Two Guys In A Costume',
+  'Not A Zebra', 'Plays Well With Others', 'Moonwalker', 'Sweaty Betty', 'Banana Hammock',
+  'Crumpet', 'Trust Fund Pony', 'Mortgage Payment', 'Last Place Larry', 'Lazy Susan',
+  'Disco Hooves', 'Kevin', 'Steve From Accounting', 'Gary', "Linda's Lucky Charm",
+  'Pony Express Lane', 'Mane Character', 'Zoom Zoom Zucchini', 'Spicy Meatball', 'Gluten Free Pony',
+  "Honk If You're Horsey", 'Thundering Toaster', 'Sir Prance-a-Lot', 'Haywire', 'Stirrup Trouble',
+  'Saddle Sore', 'Rein Man', 'Bridle Party', 'Neigh Bother', 'Feeling Hoof-y',
+  'Furlong Shot', 'Photo Finish Phil', 'Dark Horse Darryl', 'Long Shot Lenny', 'Odds Are Even',
+  'Pocket Rocket', 'Unicorn In Training', 'Velvet Thunder', 'Barn Burner', "Oh Neigh You Didn't",
+  'Hold My Hay', 'Big Barn Energy', 'Mane Street Mayhem', 'Galloping Gourmet', 'Chunky Pony',
+  'Ponytail', 'Horse Radish', 'Hoarse Voice', 'Charley Horse', 'Rocking Horse',
+  'Workhorse Wendy', 'Horsepower Hank', 'One Trick Pony', 'Gift Horse', 'High Horse Harold',
+  'Hold Your Horses', 'Horseplay', 'Neighbor Bob', 'Neighbourhood Watch', 'Tuxedo Trotter',
+  'Gallop Poll', 'Hot To Trot', 'Trotting Tornado', 'Canterbury Tail', 'Canter Believe It',
+  'Cantering Cantaloupe', 'Bucking Bronco Bill', 'Yee Haw Yolanda', 'Giddy Up Gwen', 'Whoa Nelly',
+  'Rodeo Clown', 'Cowboy Caviar', 'Lasso Lasagna', 'Sheriff Snickers', 'Dusty Britches',
+  'Muddy Hooves', 'Spurs Of The Moment', 'Wild Wild Wes', 'The Hay Ranger', 'Bronco Bonanza',
+  'Mane Frame', 'Ctrl Alt Gallop', 'Wi-Fi Pony', 'Buffering...', '404 Horse Not Found',
+  'Error In Judgement', 'Sudden Nap', 'Running Late', 'Snooze Button', 'Monday Morning',
+  'Tax Refund', 'Free Refills', 'Extra Guac', 'Pizza Pony', 'Cheese Wheel',
+  'Waffle Stomper', 'Pancake Stack', 'Burnt Toast', 'Microwave Burrito', 'Leftover Meatloaf',
+  'Soggy Cereal', 'Fluffernutter', 'Marshmallow Mayhem', 'Cinnamon Swirl', 'Butterscotch Blitz',
+  'Jellybean Jamboree', 'Bubblegum Bandit', 'Sprinkle Sprint', 'Glitter Bomb', 'Rainbow Sherbet',
+  'Tutti Frutti', 'Sir Toots-a-Lot', 'Mister Sparkles', 'Fancy Pants', 'Sir Reginald Fancypants III',
+  'Lady Gallopsworth', 'Duchess Of Dashing', 'Baron Von Trot', 'Duke Of Hay-zard', 'Lord Snortington',
+  'Captain Snorts', 'Admiral Applesauce', 'General Mayhem', 'Major Meltdown', 'Private Pickles',
+  'Sergeant Sniffles', 'Double-Oh-Neigh', 'Secret Agent Sugarcube', 'Ninja Pony', 'Pirate Pete',
+  'Space Cowboy', 'Galactic Gallop', 'Astro Oats', 'Cosmic Carrots', 'Moon Pie',
+  'Stardust Stampede', 'Comet Canter', 'Nebula Neigh', 'Couch Potato', 'Tofu Tornado',
+];
+
+// Funny default names for the people playing (before they type their own).
+export const PLAYER_NAMES = [
+  'Big Bettor', 'Lucky Lou', 'High Roller', 'Chip Chaser', 'Railbird', 'Sure Thing Sam', 'Tip Taker',
+  'Odds Wizard', 'Ticket Tearer', 'Hunch Haver', 'Paddock Pat', 'Long Shot Lou', 'Trackside Terry',
+];
+
+export const AVATARS = ['🤠', '🎩', '🧢', '👒', '🦄', '🐴', '🍀', '🎲', '🦊', '🐸', '🐷', '🐔', '🦆', '🐙', '👽', '🤡', '🧙', '🥸', '😎', '🤑'];

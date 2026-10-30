@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Horse Race | josephjackman.com</title>
+  <meta name="description" content="Horse Race: a silly online horse racing party game. Make a lobby, share the 5-number code, bet chips on ridiculous horses and dish out penalties when you win.">
+  <meta name="theme-color" content="#0f3d2e">
+  <meta property="og:title" content="Horse Race 🏇">
+  <meta property="og:description" content="Bet on ridiculous horses with your friends. Click my link to join my lobby!">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="version.js"></script>
+  <script src="vendor/peerjs.min.js"></script>
+</head>
+<body>
+  <!-- home: make or join a lobby -->
+  <section id="home" class="screen home">
+    <p class="site"><a href="/">josephjackman.com</a></p>
+    <h1 class="logo"><span class="logo-horse" aria-hidden="true">🏇</span> Horse Race</h1>
+    <p class="tagline">Bet on ridiculous horses with your friends.<br>Win chips. Dish out penalties.</p>
+    <canvas id="homeHorse" class="home-horse" width="300" height="110" aria-hidden="true"></canvas>
+    <div class="card home-card">
+      <label class="field-label" for="nameInput">Your name</label>
+      <div class="you-row">
+        <button id="avatarBtn" class="avatar-btn" type="button" title="Change your picture">🤠</button>
+        <input id="nameInput" maxlength="20" autocomplete="nickname" placeholder="Your name">
+      </div>
+      <button id="createBtn" class="btn primary big" type="button">Make a lobby</button>
+      <div class="or"><span>or join a friend</span></div>
+      <form id="joinForm" class="join-row">
+        <input id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" placeholder="5-number code" aria-label="Lobby code">
+        <button id="joinBtn" class="btn gold" type="submit">Join</button>
+      </form>
+      <p id="homeMsg" class="msg" role="status"></p>
+    </div>
+    <details class="card rules">
+      <summary>How to play</summary>
+      <ol>
+        <li><b>Make a lobby</b> and send your friends the 5-number code (or the invite link).</li>
+        <li>Every race, <b>4 to 6 horses</b> show up with silly names. <b>Pick one and bet 1 to 20 chips.</b> Lots of people can back the same horse, but only the <b>first person</b> to pick it gets to <b>rename</b> it.</li>
+        <li>There are <b>20 gates</b> on the track. Every time <b>all</b> the horses make it through the next gate, the race freezes: one horse gets <b>boosted forward a gate ⚡</b> and another gets <b>set back a gate 🐌</b>.</li>
+        <li>If your horse wins, you <b>win the chips you bet</b>, and you get <b>twice your bet in penalties</b> to dish out to anyone else, split however you like. They get a popup saying you attacked them.</li>
+        <li>Everyone's chips won and penalties are tallied under their name in the lobby.</li>
+      </ol>
+    </details>
+    <p id="buildTag" class="build"></p>
+  </section>
+
+  <!-- in a lobby -->
+  <section id="room" class="screen room" hidden>
+    <header class="topbar">
+      <div class="brand-sm"><span aria-hidden="true">🏇</span> Horse Race</div>
+      <button id="codeBtn" class="code-btn" type="button" title="Copy the invite link">Lobby <b id="codeText">-----</b> <span class="copy">Copy invite</span></button>
+      <div class="spacer"></div>
+      <button id="muteBtn" class="icon-btn" type="button" title="Sound on/off">🔊</button>
+      <button id="leaveBtn" class="icon-btn leave" type="button">Leave</button>
+    </header>
+    <div id="status" class="status" hidden></div>
+    <div class="layout">
+      <main id="stage" class="stage"></main>
+      <aside class="side">
+        <div class="card side-card">
+          <h3>Players <span id="playerCount" class="count"></span></h3>
+          <div id="players" class="players"></div>
+        </div>
+        <div class="card side-card">
+          <h3>What happened</h3>
+          <div id="log" class="log"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <div id="modal" class="modal-root"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <noscript><div style="padding:40px;text-align:center;color:#fff">Horse Race needs JavaScript turned on.</div></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

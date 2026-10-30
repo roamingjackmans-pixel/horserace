@@ -1,0 +1,12 @@
+{
+  "name": "horserace",
+  "version": "1.0.0",
+  "description": "Horse Race - a silly online horse racing party game. Bet chips, win, dish out penalties.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tools/enginetest.mjs && node tools/simstats.mjs 500"
+  },
+  "engines": { "node": ">=18" }
+}
