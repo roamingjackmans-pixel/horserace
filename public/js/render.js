@@ -312,18 +312,22 @@ export class TrackView {
         continue;
       }
       const done = g <= cleared, next = g === cleared + 1 && !(race.winner >= 0 && t >= race.fin[race.winner]);
-      ctx.strokeStyle = done ? 'rgba(255,215,64,.75)' : 'rgba(255,255,255,.55)';
-      ctx.lineWidth = 2; ctx.setLineDash([4, 5]);
+      const eventGate = ev && ev.ev.gate === g && ev.pt < PAUSE;
+      // zoomed far out on a long track the gates crowd together: label every 5th or 10th gate,
+      // and draw the unlabelled ones faintly
+      const every = cam.ppg < 14 ? 10 : cam.ppg < 26 ? 5 : 1;
+      const hot = cleared + 1;   // the gate the pack is heading for (or the one just cleared at a stop)
+      const label = next || eventGate || (g % every === 0 && (every === 1 || Math.abs(g - hot) > 1));
+      const faint = every > 1 && !label;
+      ctx.strokeStyle = done ? `rgba(255,215,64,${faint ? 0.35 : 0.75})` : `rgba(255,255,255,${faint ? 0.22 : 0.55})`;
+      ctx.lineWidth = faint ? 1 : 2; ctx.setLineDash([4, 5]);
       ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
       ctx.setLineDash([]);
       let bg = '#ffffff', fg = '#2a2118';
       if (done) { bg = '#ffd23f'; fg = '#2a2118'; }
       if (next) { const p = 0.5 + 0.5 * Math.sin(t * 6); bg = `rgb(255,${Math.round(150 + 60 * p)},${Math.round(60 * p)})`; fg = '#2a2118'; }
-      const eventGate = ev && ev.ev.gate === g && ev.pt < PAUSE;
       if (eventGate) { bg = '#ff5a36'; fg = '#fff'; }
-      // zoomed far out on a long track the number flags would pile up: label every 5th or 10th gate
-      const every = cam.ppg < 14 ? 10 : cam.ppg < 26 ? 5 : 1;
-      if (g % every === 0 || next || eventGate) flag(ctx, x, top - 16, String(g), bg, fg);
+      if (label) flag(ctx, x, top - 16, String(g), bg, fg);
     }
     // ---- starting stalls (closed during the countdown, then swing open and fade)
     if (t < 1.6) {
