@@ -11,14 +11,19 @@ ridiculous horses, and dish out penalties to your friends when you win.
 - Every race, **4 to 6 horses** show up at random, each with one of **200 funny names**. The host can instead
   pick an exact number from **2 to 8** (changing it deals a new set of horses, and everyone picks again).
 - Each player **picks a horse and bets 1 to 20 chips**. Several people can back the same horse, but only the
-  **first person to pick it can rename it**.
+  **first person to pick it can name it and style it** (🎨 Customize, purely cosmetic): the horse's coat and
+  its mane and tail (8 natural colours, 12 bright ones, 15 wild patterns like zebra, rainbow, galaxy and
+  solid gold), the rider's outfit (same choices, or the lane's team colours), 15 hats for the rider
+  (sombrero, wizard hat, mohawk, traffic cone...) and add-ons for both (jetpacks, unicorn horn, angel wings,
+  capes, balloons...). The saddle-cloth number and blinkers keep the lane colour so horses stay easy to tell
+  apart.
 - The track has **20 evenly spaced gates** by default (the last gate is the finish line). The host can set it
   anywhere from **3 to 100 gates** between races, with presets for Quick (7), Classic (20), Long (50) and
   Marathon (100).
-- Horses don't run smoothly: each one waits a random 0.3–1.3 seconds, then **hops forward exactly one gate**
-  in a quick leap. Every horse has the same odds (no hidden speed), so a horse way out in front can still be
-  caught: on 20 gates, a horse leading by 2+ gates at the three-quarter mark still loses about a quarter of
-  the time.
+- Horses don't run smoothly. It's like rolling a die: on a steady beat one horse is picked completely at
+  random and **hops forward exactly one gate** in a quick leap. Every horse has the same odds on every roll,
+  so streaks happen (the same horse can hop 4 or 5 times in a row) and a horse way out in front can still be
+  caught. With more horses the beat is quicker, so each horse hops about as often whatever the field size.
 - Every time **all** the horses make it through the next gate for the first time, every horse stops for a
   moment: **one horse is boosted forward one gate and a different one is set back one gate**.
 - No horse gets more boosts, or more setbacks, than **30% of the gates, rounded up**: 3 each on 7 gates, 6 on
@@ -26,10 +31,11 @@ ridiculous horses, and dish out penalties to your friends when you win.
 - Horses that cross the finish line keep galloping, right off the screen. Then the results open on a
   **podium**: the winner reared up on it holding a trophy and cheering, everyone else standing sadly at the
   bottom. The host clicks **Next race** to go on to the next race.
-- Rough race lengths: 7 gates about 12 seconds, 20 gates about 50 seconds, 50 gates about 2⅓ minutes,
-  100 gates about 5 minutes (plus a 4-second countdown).
+- Rough race lengths: 7 gates about 8 seconds, 20 gates about 40 seconds, 50 gates about 2 minutes,
+  100 gates about 4 minutes (plus a 4-second countdown).
 - If your horse wins, you **win the chips you bet**, and you get **twice your bet in penalties** to hand out to
-  anyone else, split however you like. Everyone you hit gets a popup saying you attacked them.
+  anyone else, split however you like, but you have to hit at least one person (no mercy). Everyone you hit
+  gets a popup saying you attacked them.
 - If your horse loses, you **take penalties equal to your bet**.
 - Under each player's name the lobby keeps a running tally of **chips won and penalties taken** (from lost bets
   and from attacks).
@@ -84,7 +90,10 @@ public/              the game (this folder is what gets published)
   js/sim.js          deterministic race simulation
   js/render.js       canvas track and cartoon horses
   js/podium.js       the winner's podium scene after each race
+  js/looks.js        every colour, pattern, hat and add-on a horse can be styled with
+  js/costume.js      drawing those patterns, hats and add-ons
   dev/podium.html    preview page for the podium scene and horse poses
+  dev/looks.html     gallery of every colour, pattern, hat and add-on
   js/audio.js        synthesized sound effects
   js/names.js        the 200 horse names
   vendor/peerjs.min.js

@@ -113,7 +113,7 @@ export class PodiumView {
       const horse = horses[h];
       ctx.globalAlpha = fadeIn;
       drawHorse(ctx, nose, groundY + sigh, hs, h, horse ? horse.coat : h, 0, 0,
-        { flip: !left, mood: 'sad', tear: still ? null : (t * 0.5 + j * 0.31) % 1 });
+        { flip: !left, mood: 'sad', tear: still ? null : (t * 0.5 + j * 0.31) % 1, look: horse && horse.look });
       // finishing place under it
       const bx = left ? nose - 56 * hs : nose + 56 * hs;
       const label = `${ordinal(j + 2)} · #${h + 1}`;
@@ -155,7 +155,7 @@ export class PodiumView {
       // a rearing horse pivots on its hind hooves, 84 units behind the nose: this centres it over the podium
       const nose = cx + 92 * ws;
       drawHorse(ctx, nose, podTop - fall, ws, winner, horse ? horse.coat : winner, t * 3.2, 0,
-        { pose: 'rear', mood: 'happy', trophy: drop >= 1, lift: cheerUnits });
+        { pose: 'rear', mood: 'happy', trophy: drop >= 1, lift: cheerUnits, look: horse && horse.look });
       // sparkles around the trophy
       if (drop >= 1) {
         const sx = nose - 60 * ws, sy = podTop - cheer - 110 * ws;   // where the trophy is

@@ -6,6 +6,7 @@ import { simulate, BOOST_AT, SETBACK_AT, MIN_GATES, MAX_GATES, effectCap, eventA
 import { NAMES, PLAYER_NAMES, AVATARS } from './names.js';
 import { TrackView, paintPortrait, drawHorse } from './render.js';
 import { PodiumView } from './podium.js';
+import { PALETTE, HATS, HORSE_GEAR, RIDER_GEAR, resolveLook, randomLook } from './looks.js';
 import { sfx, unlock, isMuted, setMuted } from './audio.js';
 
 const $ = sel => document.querySelector(sel);
@@ -392,7 +393,7 @@ function renderLog(s) {
 // ---------------------------------------------------------------- betting
 /** Rough race length for a track, from simulating thousands of races (tools/simstats.mjs). */
 function raceLength(gates) {
-  const secs = Math.max(4, 3.05 * gates - 9.4);   // 7 gates ≈ 12 s, 20 ≈ 50 s, 100 ≈ 5 min
+  const secs = Math.max(4, 2.35 * gates - 9);   // 7 gates ≈ 8 s, 20 ≈ 40 s, 100 ≈ 4 min
   if (secs < 30) return `about ${Math.round(secs)} seconds`;
   if (secs < 90) return `about ${Math.round(secs / 5) * 5} seconds`;
   return `about ${Math.round(secs / 30) / 2} minutes`;
@@ -431,9 +432,10 @@ function renderBetting(s) {
     const owner = bs[0];
     const isMine = mine && mine.h === i;
     let meta;
-    if (h.by && h.name !== h.orig) meta = `Renamed by ${esc(pname(s, h.by))} · was “${esc(h.orig)}”`;
-    else if (owner) meta = `${owner === pid ? 'You' : esc(pname(s, owner))} picked first${owner === pid ? ', so you can rename it' : ''}`;
-    else meta = 'Pick it first to rename it';
+    if (owner) meta = `${owner === pid ? 'You' : esc(pname(s, owner))} picked first${owner === pid ? ', so you get to style it' : ''}`;
+    else meta = 'Pick it first to name and style it';
+    if (h.by && h.name !== h.orig) meta += ` · was “${esc(h.orig)}”`;
+    if (h.look && h.styledBy && h.styledBy !== owner) meta += ` · styled by ${esc(pname(s, h.styledBy))}`;
     const chips = bs.map((id, k) => `<span class="backer ${k === 0 ? 'first' : ''} ${id === pid ? 'is-me' : ''}">${esc(pav(s, id))} ${esc(pname(s, id))} · ${s.picks[id].bet}</span>`).join('');
     return `<div class="horse-card ${isMine ? 'mine' : ''}" role="button" tabindex="0" data-h="${i}" aria-label="Pick horse ${i + 1}, ${esc(h.name)}">
       <span class="num" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span>
@@ -442,7 +444,7 @@ function renderBetting(s) {
       <div class="hname">${esc(h.name)}</div>
       <div class="hmeta">${meta}</div>
       ${chips ? `<div class="backers">${chips}</div>` : ''}
-      ${owner === pid ? `<button class="rename-btn" data-rename="${i}">✏️ Rename</button>` : ''}
+      ${owner === pid ? `<button class="rename-btn" data-style="${i}">🎨 Customize</button>` : ''}
     </div>`;
   }).join('');
   const betCount = Object.keys(s.picks).filter(id => s.players[id] && s.players[id].on).length;
@@ -452,7 +454,7 @@ function renderBetting(s) {
   const hostName = esc(pname(s, s.hostPid));
   $('#stage').innerHTML = `<div class="card panel">
     <div class="phase-head"><h2>Race ${s.raceNo}</h2><span class="sub">${s.horses.length} horses · ${G} gates</span></div>
-    <p class="hint">Pick a horse and bet 1 to 20 chips. Lots of people can back the same horse, but only the first to pick it can rename it.</p>
+    <p class="hint">Pick a horse and bet 1 to 20 chips. Lots of people can back the same horse, but only the first to pick it gets to name it and dress it up.</p>
     ${track}
     <div class="horses">${cards}</div>
     <div class="betbar">
@@ -468,7 +470,7 @@ function renderBetting(s) {
     </div>
   </div>`;
   // portraits
-  $('#stage').querySelectorAll('canvas[data-portrait]').forEach(c => { const i = +c.dataset.portrait; paintPortrait(c, i, s.horses[i].coat); });
+  $('#stage').querySelectorAll('canvas[data-portrait]').forEach(c => { const i = +c.dataset.portrait; paintPortrait(c, i, s.horses[i].coat, { look: s.horses[i].look }); });
   // pick a horse
   $('#stage').querySelectorAll('.horse-card').forEach(card => {
     const go = () => {
@@ -478,10 +480,10 @@ function renderBetting(s) {
       sfx.pick();
       ui.room.act({ k: 'pick', h, bet: ui.bet });
     };
-    card.onclick = e => { if (!e.target.closest('[data-rename]')) go(); };
+    card.onclick = e => { if (!e.target.closest('[data-style]')) go(); };
     card.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
   });
-  $('#stage').querySelectorAll('[data-rename]').forEach(b => b.onclick = e => { e.stopPropagation(); renameHorse(+b.dataset.rename); });
+  $('#stage').querySelectorAll('[data-style]').forEach(b => b.onclick = e => { e.stopPropagation(); styleHorse(+b.dataset.style); });
   const setBet = n => {
     n = Math.max(E.MIN_BET, Math.min(E.MAX_BET, n));
     if (n === ui.bet) return;
@@ -533,27 +535,81 @@ function renderBetting(s) {
   };
 }
 
-function renameHorse(h) {
+/** The styling studio: the first person on a horse names it and dresses up the horse and its rider. */
+function styleHorse(h) {
   const s = ui.state;
   const horse = s.horses[h];
+  const draft = resolveLook(horse.look, horse.coat);
+  const swatch = (k, v, name, css) => `<button class="sw ${draft[k] === v ? 'on' : ''}" data-k="${k}" data-v="${v}" title="${esc(name)}" aria-label="${esc(name)}" style="background:${css}"></button>`;
+  const palette = k => ['Natural', 'Bright', 'Wild'].map(g => `<div class="swgroup"><span>${g === 'Wild' ? 'Wild 🤪' : g}</span><div class="swatches">${PALETTE.filter(p => p.group === g).map(p => swatch(k, p.id, p.name, p.css)).join('')}</div></div>`).join('');
+  const gear = (k, list) => `<div class="gearlist">${list.map(x => `<button class="gearbtn ${draft[k] === x.id ? 'on' : ''}" data-k="${k}" data-v="${x.id}"><span>${x.icon}</span>${esc(x.name)}</button>`).join('')}</div>`;
+  const label = k => {
+    const v = draft[k];
+    if (k === 'mane' && v === 'match') return 'Goes with the coat';
+    if (k === 'outfit' && v === 'team') return 'Team colours';
+    const all = [...PALETTE, ...HATS, ...HORSE_GEAR, ...RIDER_GEAR];
+    const found = all.find(x => x.id === v && (k === 'hat' ? HATS.includes(x) : k === 'hgear' ? HORSE_GEAR.includes(x) : k === 'rgear' ? RIDER_GEAR.includes(x) : PALETTE.includes(x)));
+    return found ? found.name : v;
+  };
+  const team = E.SILKS[h];
   modal((el, close) => {
-    el.innerHTML = `<h2>Rename #${h + 1}</h2><p>You picked this horse first, so you get to name it.</p>
-      <input maxlength="28" value="${esc(horse.name)}" autofocus>
-      <div class="row"><button class="btn" data-random>🎲 Random</button><button class="btn" data-cancel>Cancel</button><button class="btn primary" data-save>Save</button></div>`;
+    el.innerHTML = `<h2>🎨 Style #${h + 1}</h2>
+      <div class="studio-stage"><canvas></canvas></div>
+      <div class="studio-name"><input maxlength="28" value="${esc(horse.name)}" aria-label="Horse name"><button class="btn small" data-randname title="Random name">🎲</button></div>
+      <div class="studio-tabs"><button data-tab="horse" class="on">🐴 Horse</button><button data-tab="rider">🏇 Rider</button></div>
+      <div class="studio-panel" data-panel="horse">
+        <h4>Coat <span data-label="coat"></span></h4>${palette('coat')}
+        <h4>Mane &amp; tail <span data-label="mane"></span></h4>
+        <div class="swatches">${swatch('mane', 'match', 'Goes with the coat', 'conic-gradient(#8a4b2a 0 50%,#2a1810 0)')}</div>${palette('mane')}
+        <h4>Add-on <span data-label="hgear"></span></h4>${gear('hgear', HORSE_GEAR)}
+      </div>
+      <div class="studio-panel" data-panel="rider" hidden>
+        <h4>Outfit <span data-label="outfit"></span></h4>
+        <div class="swatches">${swatch('outfit', 'team', 'Team colours', `linear-gradient(135deg,${team.bg} 0 60%,${team.cap} 0)`)}</div>${palette('outfit')}
+        <h4>Hat <span data-label="hat"></span></h4>${gear('hat', HATS)}
+        <h4>Add-on <span data-label="rgear"></span></h4>${gear('rgear', RIDER_GEAR)}
+      </div>
+      <div class="row studio-buttons"><button class="btn" data-surprise>🎲 Surprise me</button><button class="btn" data-cancel>Cancel</button><button class="btn primary" data-save>Save</button></div>`;
+    const showLabels = () => el.querySelectorAll('[data-label]').forEach(sp => { sp.textContent = label(sp.dataset.label); });
+    const showPicks = () => {
+      el.querySelectorAll('[data-k]').forEach(b => b.classList.toggle('on', draft[b.dataset.k] === b.dataset.v));
+      showLabels();
+    };
+    showLabels();
+    el.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { draft[b.dataset.k] = b.dataset.v; sfx.click(); showPicks(); });
+    el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+      el.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b));
+      el.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== b.dataset.tab; });
+    });
     const input = el.querySelector('input');
-    input.select();
-    const save = () => {
-      const name = input.value.trim().slice(0, 28);
-      if (!name) return;
-      ui.room.act({ k: 'rename', h, name });
+    el.querySelector('[data-randname]').onclick = () => { input.value = pick(NAMES); sfx.click(); };
+    el.querySelector('[data-surprise]').onclick = () => { Object.assign(draft, randomLook()); sfx.pick(); showPicks(); };
+    el.querySelector('[data-cancel]').onclick = close;
+    el.querySelector('[data-save]').onclick = () => {
+      const name = input.value.trim().slice(0, 28) || horse.name;
+      ui.room.act({ k: 'look', h, look: { ...draft }, name });
       sfx.pick();
       close();
     };
-    input.onkeydown = e => { if (e.key === 'Enter') save(); };
-    el.querySelector('[data-random]').onclick = () => { input.value = pick(NAMES); sfx.click(); };
-    el.querySelector('[data-cancel]').onclick = close;
-    el.querySelector('[data-save]').onclick = save;
-  });
+    // live preview: the horse galloping in its new outfit
+    const c = el.querySelector('canvas');
+    const t0 = performance.now();
+    const frame = () => {
+      if (!el.isConnected) return;
+      requestAnimationFrame(frame);
+      const dpr = Math.min(2, window.devicePixelRatio || 1), w = c.clientWidth, hgt = c.clientHeight;
+      if (!w) return;
+      if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(hgt * dpr); }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, hgt);
+      const t = (performance.now() - t0) / 1000;
+      ctx.fillStyle = '#48a842'; for (let x = -((t * 120) % 60); x < w; x += 60) ctx.fillRect(x, hgt - 16, 30, 16);
+      ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillRect(0, hgt - 17, w, 2);
+      const sc = Math.min(w / 160, (hgt - 6) / 132);
+      drawHorse(ctx, w / 2 + 64 * sc, hgt - 8, sc, h, horse.coat, t * 10, 1, { look: draft });
+    };
+    requestAnimationFrame(frame);
+  }, 'studio');
 }
 
 // ---------------------------------------------------------------- the race
@@ -779,7 +835,7 @@ function renderResults(s) {
         <span class="spacer"></span>
         ${targets.length > 1 ? '<button class="btn small" data-even>Split evenly</button>' : ''}
         ${used ? '<button class="btn small" data-clear>Reset</button>' : ''}
-        ${used ? `<button class="btn primary" data-attack>💥 Attack!</button>` : '<button class="btn" data-mercy>Show mercy (give none)</button>'}
+        <button class="btn primary" data-attack ${used ? '' : 'disabled title="Give at least one penalty first"'}>💥 Attack!</button>
       </div>
     </div>`;
   }
@@ -788,7 +844,7 @@ function renderResults(s) {
   const attacks = res.attacks.length ? `<div class="attacks">${res.attacks.map(a => {
     const list = Object.entries(a.hits).map(([id, n]) => `${esc(pname(s, id))} 💥${n}`).join(', ');
     const hitMe = a.hits[pid];
-    return `<div class="attack-line ${hitMe ? 'me' : ''}">${esc(pav(s, a.from))} <b>${esc(pname(s, a.from))}</b> ${a.total ? `attacked ${list}` : 'showed mercy'}</div>`;
+    return `<div class="attack-line ${hitMe ? 'me' : ''}">${esc(pav(s, a.from))} <b>${esc(pname(s, a.from))}</b> attacked ${list}</div>`;
   }).join('')}</div>` : '';
 
   $('#resHeadline').textContent = headline;
@@ -830,8 +886,6 @@ function renderResults(s) {
   if (clear) clear.onclick = () => { ui.draft = {}; renderResults(ui.state); };
   const atk = stage.querySelector('[data-attack]');
   if (atk) atk.onclick = () => { sfx.send(); ui.room.act({ k: 'attack', hits: { ...ui.draft } }); };
-  const mercy = stage.querySelector('[data-mercy]');
-  if (mercy) mercy.onclick = () => confirmBox('Show mercy?', 'You will give out no penalties this race.', 'Yes, no penalties', 'Go back', () => ui.room.act({ k: 'attack', hits: {} }));
   const next = stage.querySelector('[data-next]');
   if (next) next.onclick = () => {
     const pendingNow = E.pendingAttackers(ui.state);
@@ -860,7 +914,7 @@ function checkAttacks(s) {
         if (navigator.vibrate) navigator.vibrate([80, 40, 140]);
       }, 'attack-modal');
     } else if (a.from === pid) {
-      toast(a.total ? '💥 Attack sent!' : 'You showed mercy 😇', 'good');
+      toast('💥 Attack sent!', 'good');
     } else if (a.total) {
       const list = Object.entries(a.hits).map(([t, n]) => `${pname(s, t)} (${n})`).join(', ');
       toast(`💥 ${from} attacked ${list}`);

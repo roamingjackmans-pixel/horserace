@@ -16,6 +16,19 @@ ok(!E.apply(s, 'A', { k: 'rename', h: 0, name: 'Nope' }).ok, 'second picker cann
 ok(E.apply(s, 'B', { k: 'rename', h: 0, name: 'Glue Stick' }).ok && s.horses[0].name === 'Glue Stick', 'owner renames');
 ok(E.apply(s, 'B', { k: 'bet', bet: 7 }).ok && E.ownerOf(s, 0) === 'B', 'changing bet keeps ownership');
 ok(E.apply(s, 'C', { k: 'pick', h: 1, bet: 3 }).ok, 'C picks 1');
+// styling a horse
+{
+  const fancy = { coat: 'zebra', mane: 'rainbow', outfit: 'galaxy', hat: 'sombrero', hgear: 'jetpack', rgear: 'balloon' };
+  ok(!E.apply(s, 'A', { k: 'look', h: 0, look: fancy }).ok, 'only the first picker can style a horse');
+  ok(E.apply(s, 'B', { k: 'look', h: 0, look: fancy, name: 'Zebra Rocket' }).ok, 'first picker styles it');
+  const h0 = s.horses[0];
+  ok(h0.name === 'Zebra Rocket' && h0.look && h0.look.coat === 'zebra' && h0.look.hgear === 'jetpack' && h0.styledBy === 'B', 'look and name saved');
+  E.apply(s, 'B', { k: 'look', h: 0, look: { coat: 'plaid<script>', hat: 'nope', hgear: 'horn' } });
+  ok(h0.look.hat === 'helmet' && h0.look.hgear === 'horn' && !String(h0.look.coat).includes('<'), 'unknown values fall back to defaults');
+  E.apply(s, 'B', { k: 'look', h: 0, look: {} });
+  ok(h0.look === null, 'back to plain: no look stored');
+  E.apply(s, 'B', { k: 'look', h: 0, look: fancy });
+}
 // number of horses
 {
   const t = E.newRoom('22222', { pid: 'H', name: 'Hal' }, 1000);
@@ -62,7 +75,8 @@ ok(r.ok && r.attack.total === 14, 'B attacks C and A');
 ok(!E.apply(s, 'B', { k: 'attack', hits: { C: 1 } }).ok, 'cannot attack twice');
 ok(s.players.C.taken === 13 && s.players.A.taken === 4 && s.players.B.taken === 0, 'tallies: lost bet + attacks add up');
 ok(E.pendingAttackers(s).join() === 'A', 'A still pending');
-ok(E.apply(s, 'A', { k: 'attack', hits: {} }).ok && E.pendingAttackers(s).length === 0, 'mercy');
+ok(!E.apply(s, 'A', { k: 'attack', hits: {} }).ok, 'no mercy: an empty attack is refused');
+ok(E.apply(s, 'A', { k: 'attack', hits: { B: 1 } }).ok && E.pendingAttackers(s).length === 0, 'A attacks');
 ok(!E.apply(s, 'B', { k: 'next' }).ok, 'non-host cannot advance');
 ok(E.apply(s, 'A', { k: 'next' }).ok && s.phase === 'betting' && s.raceNo === 2 && !Object.keys(s.picks).length, 'next race');
 ok(s.players.A.chips === 20, 'tallies persist across races');

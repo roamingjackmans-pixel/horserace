@@ -4,8 +4,10 @@
 //
 // Positions are measured in gates: the horses start at 0, gate k sits at k, and the last gate is the finish
 // line. The host picks how many gates a race has (MIN_GATES to MAX_GATES, 20 by default).
-// Horses don't run smoothly: each one waits a random moment, then hops forward exactly one gate in a quick
-// JUMP_LEN-second leap. Every horse has the same odds, so a horse way out in front can still be caught.
+// Horses don't run smoothly. It's like rolling a die: on a steady beat, one horse is picked completely at
+// random and hops forward exactly one gate in a quick JUMP_LEN-second leap. Every horse has the same odds on
+// every roll, so streaks happen (A A A A B A...) and a horse way out in front can still be caught. With more
+// horses the beat is quicker, so each horse hops about as often whatever the field size.
 // Whenever every horse has made it through the next gate for the first time, all horses stop for PAUSE
 // seconds: one random horse is boosted forward one gate and a different one is set back one gate.
 // No horse gets more than effectCap(gates) boosts, or that many setbacks, in one race.
@@ -28,8 +30,8 @@ export const SETBACK_LEN = 0.45;
 export const AFTER_WIN = 4;          // keep the rest running this long after the winner crosses the line
 export const COUNTDOWN = 4;          // seconds between "start" and the gates opening
 export const JUMP_LEN = 0.22;        // one hop forward of one gate takes this long
-export const WAIT_MIN = 0.3;         // each horse waits this long...
-export const WAIT_MAX = 1.3;         // ...to this long (at random) between hops
+export const ROLL_BASE = 1.0;        // seconds per roll of the die is ROLL_BASE / horses...
+export const ROLL_MIN = 0.13;        // ...but never quicker than this
 
 /** Small, fast, seeded random number generator (mulberry32). Integer math only. */
 export function rng(seed) {
@@ -57,14 +59,16 @@ const ease = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
 export function simulate(seed, n, gates = DEFAULT_GATES, tune = {}) {
   const GATES = cleanGates(gates);
   const cap = effectCap(GATES);
-  const waitMin = tune.waitMin || WAIT_MIN, waitMax = tune.waitMax || WAIT_MAX;   // (tune: for tools/simstats only)
+  const rollEvery = Math.max(tune.rollMin || ROLL_MIN, (tune.rollBase || ROLL_BASE) / n);   // (tune: tools only)
   const r = rng(seed);
-  const wait = () => waitMin + r() * (waitMax - waitMin);
+  const beat = () => rollEvery * (0.85 + r() * 0.3);   // a little jitter so it doesn't sound like a metronome
   const H = [];
   for (let i = 0; i < n; i++) {
-    // jump: the hop in progress { start, from } · next: when the next hop starts · at: when it reached its spot
-    H.push({ pos: 0, jump: null, next: 0.1 + r() * (waitMax - 0.1), at: 0, fin: -1, boosts: 0, setbacks: 0 });
+    // jump: the hop in progress { start, from } · queue: hops rolled while it was still in the air
+    // at: when it reached its current spot
+    H.push({ pos: 0, jump: null, queue: 0, at: 0, fin: -1, boosts: 0, setbacks: 0 });
   }
+  let nextRoll = 0.25;
   const pickFrom = list => (list.length ? list[Math.floor(r() * list.length)] : -1);
   const maxSteps = Math.ceil((60 + GATES * 6) / DT);   // far more time than any race needs
   const frames = new Float32Array(maxSteps * n);
@@ -103,45 +107,55 @@ export function simulate(seed, n, gates = DEFAULT_GATES, tune = {}) {
       if (pt >= PAUSE) {
         const done = pause;
         pause = null;
-        // back to hopping, each horse after its own fresh random wait
         for (let i = 0; i < n; i++) {
           const h = H[i];
           h.pos = Math.round(h.pos);
           if (i === done.boost || i === done.setback) h.at = t;
-          h.next = t + wait();
         }
+        nextRoll = t + beat();   // back to rolling the die
       }
     } else {
-      // Each step is done in passes so that no horse gets an edge from where it sits in the list:
-      // 1) land the hops that are due, and move the ones still in the air
+      // 1) land the hops that are due (a horse the die picked again while it was in the air goes straight
+      //    back up), and move the ones still in the air
       for (let i = 0; i < n; i++) {
         const h = H[i];
         if (h.fin >= 0 || !h.jump) continue;           // (over the line: stands there)
         const k = (t - h.jump.start) / JUMP_LEN;
-        if (k >= 1) {
-          const land = h.jump.start + JUMP_LEN;
-          h.pos = h.jump.from + 1; h.jump = null; h.at = land;
-          h.next = land + wait();
-          if (h.pos >= GATES) finish(i, land);
-        } else {
-          h.pos = h.jump.from + ease(k);
+        if (k < 1) { h.pos = h.jump.from + ease(k); continue; }
+        const land = h.jump.start + JUMP_LEN;
+        h.pos = h.jump.from + 1; h.jump = null; h.at = land;
+        if (h.pos >= GATES) { finish(i, land); h.queue = 0; continue; }
+        if (h.queue > 0) {
+          h.queue--;
+          h.jump = { start: land, from: h.pos };
+          h.pos = h.jump.from + ease((t - land) / JUMP_LEN);
         }
       }
       // 2) is everyone through the next gate? (a horse in the air counts from where it took off)
       let minLanded = Infinity;
       for (const h of H) { const p = h.jump ? h.jump.from : h.pos; if (p < minLanded) minLanded = p; }
       const stopping = winner < 0 && nextGate < GATES && minLanded >= nextGate;
-      // 3) start new hops for horses whose wait is up (none while we're about to stop)
-      if (!stopping) {
-        for (let i = 0; i < n; i++) {
-          const h = H[i];
-          if (h.fin >= 0 || h.jump || t < h.next) continue;
-          h.jump = { start: h.next, from: h.pos };
-          h.pos = h.jump.from + ease((t - h.jump.start) / JUMP_LEN);
+      // 3) roll the die on the beat: one horse, picked at random from those still racing, hops
+      //    (no rolling while we're about to stop)
+      if (stopping) {
+        if (nextRoll < t) nextRoll = t;
+      } else {
+        while (t >= nextRoll) {
+          const racing = [];
+          for (let i = 0; i < n; i++) if (H[i].fin < 0) racing.push(i);
+          if (racing.length) {
+            const h = H[racing[Math.floor(r() * racing.length)]];
+            if (h.jump) h.queue++;
+            else {
+              h.jump = { start: nextRoll, from: h.pos };
+              h.pos = h.jump.from + ease((t - nextRoll) / JUMP_LEN);
+            }
+          }
+          nextRoll += beat();
         }
       }
       // 4) everyone through the next gate for the first time, and nobody mid-air: freeze!
-      if (stopping && H.every(h => !h.jump)) {
+      if (stopping && H.every(h => !h.jump && !h.queue)) {
         clears.push({ t, gate: nextGate });
         // only horses that haven't hit their limit can be picked
         const all = H.map((h, i) => i);

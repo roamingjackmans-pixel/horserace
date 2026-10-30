@@ -1,9 +1,10 @@
 // Room state and game rules. Only the host runs these functions; everyone else just receives the state.
 // Every function here is plain data in, plain data out, so it also runs under Node for tests.
 import { NAMES } from './names.js';
+import { cleanLook, isCustom } from './looks.js';
 import { simulate, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
 
-export const PROTO = 5;               // bump when the message format, rules or race simulation change
+export const PROTO = 6;               // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
@@ -183,6 +184,28 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
       horse.name = name; horse.by = pid;
       return { ok: true };
     }
+    case 'look': {
+      // the first person on a horse styles it: coat, mane, rider outfit, hat and add-ons (plus its name)
+      if (s.phase !== 'betting') return { ok: false, err: 'Too late to restyle, the race is on' };
+      const h = int(a.h);
+      if (!(h >= 0 && h < s.horses.length)) return { ok: false, err: 'No such horse' };
+      if (ownerOf(s, h) !== pid) return { ok: false, err: 'Only the first person to pick this horse can style it' };
+      const horse = s.horses[h];
+      if (a.name != null) {
+        const name = clean(a.name, 28);
+        if (name && name !== horse.name) {
+          log(s, `${me.name} renamed #${h + 1} ${horse.name} to ${name}`);
+          horse.name = name; horse.by = pid;
+        }
+      }
+      const look = cleanLook(a.look, horse.coat);
+      if (JSON.stringify(look) !== JSON.stringify(horse.look || null)) {
+        horse.look = isCustom(look, horse.coat) ? look : null;
+        horse.styledBy = horse.look ? pid : null;
+        if (horse.look) log(s, `${me.name} gave #${h + 1} ${horse.name} a makeover`);
+      }
+      return { ok: true };
+    }
     case 'start': {
       if (!isHost) return { ok: false, err: 'Only the host can start the race' };
       if (s.phase !== 'betting') return { ok: false, err: 'The race already started' };
@@ -235,16 +258,13 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
         hits[target] = n; total += n;
       }
       if (total > max) return { ok: false, err: `You only have ${max} penalties to give` };
+      if (total < 1) return { ok: false, err: 'No mercy! Give at least one penalty to someone' };
       s.res.done[pid] = true;
       const attack = { id: `r${s.raceNo}-${pid}`, from: pid, hits, total };
       s.res.attacks.push(attack);
       for (const [target, n] of Object.entries(hits)) s.players[target].taken += n;
-      if (total) {
-        const list = Object.entries(hits).map(([t, n]) => `${s.players[t].name} (${n})`).join(', ');
-        log(s, `${me.name} attacked ${list}`);
-      } else {
-        log(s, `${me.name} showed mercy and gave no penalties`);
-      }
+      const list = Object.entries(hits).map(([t, n]) => `${s.players[t].name} (${n})`).join(', ');
+      log(s, `${me.name} attacked ${list}`);
       return { ok: true, attack };
     }
     case 'next': {
@@ -293,7 +313,10 @@ export function finishRace(s) {
     const win = p.h === w;
     payouts.push({ pid, h: p.h, bet: p.bet, win });
     pl.races++;
-    if (win) { pl.chips += p.bet; pl.wins++; pools[pid] = p.bet * PENALTY_MULT; }
+    if (win) {
+      pl.chips += p.bet; pl.wins++;
+      if (s.order.some(id => id !== pid)) pools[pid] = p.bet * PENALTY_MULT;   // (nobody else here: nobody to attack)
+    }
     else pl.taken += p.bet;
   }
   s.res = { winner: w, order: s.race.order, payouts, pools, done: {}, attacks: [] };

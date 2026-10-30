@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Looks gallery | Horse Race</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 14px; background: #0f3d2e; color: #fff; font-family: Fredoka, system-ui, sans-serif; }
+  h2 { font-size: 18px; margin: 14px 0 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  figure { margin: 0; background: #3f9a3a; border-radius: 12px; padding: 4px; text-align: center; }
+  canvas { width: 100%; height: 118px; display: block; }
+  figcaption { font-size: 12px; padding: 2px 0 3px; }
+</style>
+</head>
+<body>
+  <h1 style="font-size:20px;margin:0">Every colour, pattern, hat and add-on</h1>
+  <h2>Coats</h2><div class="grid" id="coats"></div>
+  <h2>Rider outfits</h2><div class="grid" id="outfits"></div>
+  <h2>Rider hats</h2><div class="grid" id="hats"></div>
+  <h2>Horse add-ons</h2><div class="grid" id="hgear"></div>
+  <h2>Rider add-ons</h2><div class="grid" id="rgear"></div>
+  <script type="module">
+    import { drawHorse } from '../js/render.js';
+    import { PALETTE, HATS, HORSE_GEAR, RIDER_GEAR } from '../js/looks.js';
+    const cards = [];
+    const add = (where, label, look, lane = 2) => {
+      const f = document.createElement('figure');
+      f.innerHTML = `<canvas></canvas><figcaption>${label}</figcaption>`;
+      document.getElementById(where).appendChild(f);
+      cards.push({ c: f.querySelector('canvas'), look, lane });
+    };
+    PALETTE.forEach(p => add('coats', p.name, { coat: p.id }));
+    PALETTE.filter(p => p.group !== 'Natural').forEach(p => add('outfits', p.name, { coat: 'grey', outfit: p.id }));
+    HATS.forEach(h => add('hats', h.icon + ' ' + h.name, { coat: 'chestnut', hat: h.id }));
+    HORSE_GEAR.forEach(h => add('hgear', h.icon + ' ' + h.name, { coat: 'white', hgear: h.id }, 0));
+    RIDER_GEAR.forEach(h => add('rgear', h.icon + ' ' + h.name, { coat: 'bay', rgear: h.id }, 4));
+    const t0 = performance.now();
+    const frame = () => {
+      requestAnimationFrame(frame);
+      const t = (performance.now() - t0) / 1000;
+      for (const k of cards) {
+        const dpr = Math.min(2, devicePixelRatio || 1), w = k.c.clientWidth, h = k.c.clientHeight;
+        if (k.c.width !== Math.round(w * dpr)) { k.c.width = Math.round(w * dpr); k.c.height = Math.round(h * dpr); }
+        const ctx = k.c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+        const s = Math.min(w / 140, h / 124);
+        drawHorse(ctx, w / 2 + 64 * s, h - 4 * s, s, k.lane, 0, t * 9, 1, { look: k.look });
+      }
+    };
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

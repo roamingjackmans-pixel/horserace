@@ -1,6 +1,8 @@
 // Drawing: the cartoon horses and the race track. Pure canvas, no images.
 import { PAUSE, BOOST_AT, BOOST_LEN, SETBACK_AT, SETBACK_LEN, positionsAt, eventAt, gatesClearedAt } from './sim.js';
-import { SILKS, COATS } from './engine.js';
+import { SILKS } from './engine.js';
+import { resolveLook } from './looks.js';
+import { paint, baseColor, isPlain, maneStyle, drawHorseGear, drawRiderBehind, drawRiderFront, drawHat } from './costume.js';
 
 const TAU = Math.PI * 2;
 
@@ -14,12 +16,15 @@ function shade(hex, k) {
 }
 
 /** Draws a two-part leg; returns where the hoof ended up. Angles are from straight down, towards the nose. */
-function limb(ctx, x, y, a1, a2, l1, l2, w1, w2, color, hoof) {
+function limb(ctx, x, y, a1, a2, l1, l2, w1, w2, color, hoof, dim) {
   const kx = x + Math.sin(a1) * l1, ky = y + Math.cos(a1) * l1;
   const fx = kx + Math.sin(a1 + a2) * l2, fy = ky + Math.cos(a1 + a2) * l2;
-  ctx.strokeStyle = color; ctx.lineCap = 'round';
-  ctx.lineWidth = w1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.stroke();
-  ctx.lineWidth = w2; ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(fx, fy); ctx.stroke();
+  ctx.lineCap = 'round';
+  for (const style of dim ? [color, 'rgba(0,0,0,.28)'] : [color]) {   // dim: a patterned far leg, shaded darker
+    ctx.strokeStyle = style;
+    ctx.lineWidth = w1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.stroke();
+    ctx.lineWidth = w2; ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(fx, fy); ctx.stroke();
+  }
   ctx.fillStyle = hoof;
   ctx.beginPath(); ctx.arc(fx, fy, w2 * 0.62, 0, TAU); ctx.fill();
   return [fx, fy];
@@ -60,11 +65,19 @@ export function drawTrophy(ctx, x, y, size = 1) {
  * opts.trophy  holding a trophy up in its front hooves (with pose 'rear')
  * opts.mood    'happy': smiling eyes, open mouth, jockey cheering · 'sad': head hung low, droopy eyes, frown
  * opts.tear    0..1: a tear rolling down (sad horses)
+ * opts.look    the horse's customization (looks.js): coat, mane, rider outfit, hat and add-ons
  */
 export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts = {}) {
   const silk = SILKS[lane % SILKS.length];
-  const [coat, mane] = COATS[coatIdx % COATS.length];
-  const far = shade(coat, -0.28);
+  const look = resolveLook(opts.look, coatIdx);
+  const box = { x0: -112, y0: -100, x1: 0, y1: 0 };
+  const coat = paint(ctx, look.coat, box);               // a colour, gradient or pattern
+  const coatBase = baseColor(look.coat);                 // its main colour, for shading
+  const plainCoat = isPlain(look.coat);
+  const far = plainCoat ? shade(coatBase, -0.28) : coat;
+  const mane = maneStyle(ctx, look.mane, look.coat, box);
+  // the rider's silks: the lane's colours, or anything from the palette (patterns drawn smaller)
+  const outfit = look.outfit === 'team' ? silk.bg : paint(ctx, look.outfit, { x0: -68, y0: -96, x1: -36, y1: -56 }, 0.45);
   const hoof = '#2a2320';
   const lift = opts.lift || 0, rear = opts.pose === 'rear', happy = opts.mood === 'happy', sad = opts.mood === 'sad';
   ctx.save();
@@ -84,14 +97,15 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   if (rear) { ctx.translate(-84, 0); ctx.rotate(-REAR); ctx.translate(84, 0); }   // tip back onto the hind hooves
   const swing = (o, amp) => Math.sin(phase + o) * amp * run;
   const bend = (o, amp) => Math.max(0, Math.sin(phase + o + 1.3)) * amp * run;
+  drawHorseGear(ctx, look.hgear, 'behind');   // cape, far wing
   // far legs
   if (rear) {
     const wave = Math.sin(phase * 2) * 0.12;
-    limb(ctx, -44, -38, 1.3 + wave, 0.3, 17, 18, 6.5, 4.6, far, hoof);
-    limb(ctx, -84, -40, -REAR + 0.1, 0.15, 17, 19, 7.5, 4.6, far, hoof);   // (local -REAR is straight down once tipped back)
+    limb(ctx, -44, -38, 1.3 + wave, 0.3, 17, 18, 6.5, 4.6, far, hoof, !plainCoat);
+    limb(ctx, -84, -40, -REAR + 0.1, 0.15, 17, 19, 7.5, 4.6, far, hoof, !plainCoat);   // (local -REAR is straight down once tipped back)
   } else {
-    limb(ctx, -44, -38, swing(0.6, 0.75), -bend(0.6, 1.1), 17, 18, 6.5, 4.6, far, hoof);
-    limb(ctx, -84, -40, -swing(3.7, 0.7), bend(3.7, 1.0), 17, 19, 7.5, 4.6, far, hoof);
+    limb(ctx, -44, -38, swing(0.6, 0.75), -bend(0.6, 1.1), 17, 18, 6.5, 4.6, far, hoof, !plainCoat);
+    limb(ctx, -84, -40, -swing(3.7, 0.7), bend(3.7, 1.0), 17, 19, 7.5, 4.6, far, hoof, !plainCoat);
   }
   // tail
   ctx.strokeStyle = mane; ctx.lineCap = 'round'; ctx.lineWidth = 7;
@@ -127,7 +141,7 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.moveTo(-50, -58); ctx.lineTo(-20, -80); ctx.lineTo(-6, -70); ctx.lineTo(-32, -38);
   ctx.closePath(); ctx.fill();
   ctx.beginPath(); ctx.ellipse(-11, -66, 13, 7.5, 0.62, 0, TAU); ctx.fill();
-  ctx.fillStyle = shade(coat, -0.2);
+  ctx.fillStyle = shade(coatBase, -0.2);
   ctx.beginPath(); ctx.ellipse(-2, -59, 4.5, 4, 0.6, 0, TAU); ctx.fill();  // muzzle
   ctx.fillStyle = '#1b1411';
   ctx.beginPath(); ctx.arc(-1.5, -59.5, 1.1, 0, TAU); ctx.fill();          // nostril
@@ -159,7 +173,7 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
     ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-13.4, sad ? -69.2 : -70, 1.3, 0, TAU); ctx.fill();
     if (sad) {
       // heavy eyelid
-      ctx.fillStyle = shade(coat, -0.1);
+      ctx.fillStyle = shade(coatBase, -0.1);
       ctx.beginPath(); ctx.arc(-14, -70, 2.5, Math.PI, 0); ctx.fill();
       ctx.strokeStyle = '#2a1a12'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(-17, -71); ctx.lineTo(-11.4, -70); ctx.stroke();
@@ -180,6 +194,7 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.beginPath(); ctx.moveTo(-21, -80);
   ctx.lineTo(-29, -76 + mw); ctx.lineTo(-27, -72); ctx.lineTo(-37, -70 - mw); ctx.lineTo(-35, -66); ctx.lineTo(-46, -62 + mw);
   ctx.stroke();
+  drawHorseGear(ctx, look.hgear, 'head');     // horn, hats, sunglasses, flowers, horns, bow tie
   ctx.restore();
   // saddle cloth with number
   ctx.fillStyle = silk.bg;
@@ -189,8 +204,10 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.font = 'bold 13px Fredoka, system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   text(String(lane + 1), -64, -50.5);
+  drawHorseGear(ctx, look.hgear, 'back');     // rocket, near wing
   // ---- jockey
   const lean = sad ? 0.45 : run ? 0.15 * run : 0;
+  drawRiderBehind(ctx, look.rgear, lean * 10); // jetpack, cape, wings, balloon, flag
   ctx.save();
   ctx.translate(-62, -60);
   ctx.rotate(0.55 + lean);
@@ -203,7 +220,7 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.strokeStyle = '#1d1a18'; ctx.lineWidth = 5;
   ctx.beginPath(); ctx.moveTo(-52, -50); ctx.lineTo(-57, -45); ctx.stroke();
   // torso
-  ctx.fillStyle = silk.bg;
+  ctx.fillStyle = outfit;
   ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(-66, -60); ctx.lineTo(-58, -82 + lean * 10); ctx.lineTo(-47, -78 + lean * 10); ctx.lineTo(-54, -58);
@@ -212,7 +229,7 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
   ctx.strokeStyle = silk.cap; ctx.lineWidth = 2.2;
   ctx.beginPath(); ctx.moveTo(-60, -76 + lean * 10); ctx.lineTo(-52, -74 + lean * 10); ctx.stroke();
   const shoulderY = -76 + lean * 10;
-  ctx.strokeStyle = silk.bg; ctx.lineWidth = 4.5;
+  ctx.strokeStyle = outfit; ctx.lineWidth = 4.5;
   if (happy) {
     // both arms up, waving
     const w1 = Math.sin(phase * 3) * 3, w2 = Math.sin(phase * 3 + 2) * 3;
@@ -233,14 +250,11 @@ export function drawHorse(ctx, x, y, s, lane, coatIdx, phase = 0, run = 0, opts 
     ctx.strokeStyle = 'rgba(40,20,10,.7)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-35, -63 + armY); ctx.lineTo(-8, -62); ctx.stroke();
   }
-  // head + helmet
+  // head + hat (a racing helmet unless they picked something sillier)
   const hx = -50 + (sad ? 3 : 0), hy = -87 + lean * 12;
   ctx.fillStyle = '#f2c9a0'; ctx.beginPath(); ctx.arc(hx + 1.5, hy + 2, 4.6, 0, TAU); ctx.fill();
-  ctx.fillStyle = silk.cap;
-  ctx.beginPath(); ctx.arc(hx, hy, 5.6, Math.PI, 0); ctx.fill();
-  ctx.fillRect(hx, hy - 1.2, 8.5, 2.4); // peak
-  ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(hx, hy, 5.6, Math.PI, 0); ctx.stroke();
+  drawRiderFront(ctx, look.rgear, hx, hy);     // scarf, sunglasses, mustache
+  drawHat(ctx, look.hat, hx, hy, silk.cap);
   // the trophy, held up in the front hooves and kept upright
   if (rear && opts.trophy && hoofUp) {
     ctx.save();
@@ -269,8 +283,9 @@ export function paintPortrait(canvas, lane, coat, opts = {}) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  const s = Math.min(w / 125, h / 96);
-  drawHorse(ctx, w / 2 + 58 * s, h - 6 * s, s, lane, coat, opts.phase || 0, opts.run || 0);
+  // leave room for tall add-ons (balloons, flags, wings) above and rocket flames behind
+  const s = Math.min(w / 140, h / 124);
+  drawHorse(ctx, w / 2 + 64 * s, h - 4 * s, s, lane, coat, opts.phase || 0, opts.run || 0, { look: opts.look });
 }
 
 // ---------------------------------------------------------------- the race track
@@ -510,7 +525,7 @@ export class TrackView {
         ctx.fillText(label, tx + 5, ty + 8.5);
         ctx.restore();
       }
-      drawHorse(ctx, x, y, sc, i, h ? h.coat : i, this.phase[i], run, { lift });
+      drawHorse(ctx, x, y, sc, i, h ? h.coat : i, this.phase[i], run, { lift, look: h && h.look });
       // "you" marker
       if (i === this.myLane) {
         const by = laneTop(i) + 3 + Math.sin(t * 5) * 1.5;
