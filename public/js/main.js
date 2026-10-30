@@ -405,8 +405,8 @@ function renderBetting(s) {
   const pid = myPid(), isHost = s.hostPid === pid, mine = s.picks[pid];
   const online = s.order.filter(id => s.players[id] && s.players[id].on);
   const G = E.gatesOf(s), cap = effectCap(G);
-  const hset = E.horseSetting(s), hn = s.horses.length;   // 0 = random 4-6
-  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, hset, s.order.map(id => s.players[id] && s.players[id].name)]);
+  const hn = s.horses.length;
+  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, s.order.map(id => s.players[id] && s.players[id].name)]);
   if (key === ui.stageKey) return;
   ui.stageKey = key;
   const presets = [[7, 'Quick'], [20, 'Classic'], [50, 'Long'], [100, 'Marathon']];
@@ -421,9 +421,9 @@ function renderBetting(s) {
       <div class="setrow">
         <span class="label">🐴 Horses</span>
         ${isHost
-      ? `<div class="stepper"><button data-hstep="-1" aria-label="Fewer horses" ${hset && hn <= E.MIN_HORSES ? 'disabled' : ''}>−</button><div class="amt hcount">${hn}</div><button data-hstep="1" aria-label="More horses" ${hset && hn >= E.MAX_HORSES ? 'disabled' : ''}>+</button></div>
-           <div class="quick presets"><button data-hrandom class="${hset ? '' : 'on'}">🎲 Random ${E.RANDOM_MIN}–${E.RANDOM_MAX}</button></div>`
-      : `<b class="gcount">${hn} horses${hset ? '' : ' (random)'}</b>`}
+      ? `<div class="stepper"><button data-hstep="-1" aria-label="Fewer horses" ${hn <= E.MIN_HORSES ? 'disabled' : ''}>−</button><div class="amt hcount">${hn}</div><button data-hstep="1" aria-label="More horses" ${hn >= E.MAX_HORSES ? 'disabled' : ''}>+</button></div>
+           <div class="quick presets"><button data-hrandom>🎲 Random ${E.RANDOM_MIN}–${E.RANDOM_MAX}</button></div>`
+      : `<b class="gcount">${hn} horses</b>`}
       </div>
       <div class="track-note">Max <b>${cap} boosts</b> and <b>${cap} setbacks</b> per horse (30% of the gates) · races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
     </div>`;
@@ -511,17 +511,22 @@ function renderBetting(s) {
     gi.onkeydown = e => { if (e.key === 'Enter') gi.blur(); };
     gi.onblur = () => setGates(parseInt(gi.value, 10));   // also redraws if nothing changed
   }
-  // number of horses (host only). Deals a new field, so check first if anyone has already picked.
+  // number of horses (host only). New horses join at the end; removing takes horses off the end, so only
+  // ask first if one of those has a pick, a new name or a costume (they'd be lost).
   const setHorses = n => {
     const st = ui.state;
     const go = () => { sfx.click(); ui.room.act({ k: 'horses', n }); };
-    if (Object.keys(st.picks).length) {
-      confirmBox(n ? `Race with ${n} horses?` : 'Random number of horses?', "That deals a new set of horses, so everyone's picks and renames are cleared and they pick again.", 'Deal new horses', 'Cancel', go);
+    const keep = n || E.RANDOM_MIN;   // a random roll keeps at least the first 4
+    const lost = st.horses.map((h, i) => i).filter(i => i >= keep && (
+      Object.values(st.picks).some(p => p.h === i) || (st.horses[i].by && st.horses[i].name !== st.horses[i].orig) || st.horses[i].look));
+    if (lost.length) {
+      const which = lost.map(i => `#${i + 1} ${st.horses[i].name}`).join(', ');
+      confirmBox(n ? `Race with ${n} horses?` : 'Random number of horses?', `${n ? 'That takes' : 'That might take'} ${which} out of the race, along with its name, its look and anyone's bet on it. If you add it back later it'll be a brand new horse.`, n ? 'Take it out' : 'Roll the dice', 'Cancel', go);
     } else go();
   };
   $('#stage').querySelectorAll('[data-hstep]').forEach(b => b.onclick = () => {
     const n = Math.max(E.MIN_HORSES, Math.min(E.MAX_HORSES, ui.state.horses.length + +b.dataset.hstep));
-    if (n !== ui.state.horses.length || !E.horseSetting(ui.state)) setHorses(n);
+    if (n !== ui.state.horses.length) setHorses(n);
   });
   const hr = $('#stage [data-hrandom]');
   if (hr) hr.onclick = () => setHorses(0);

@@ -8,8 +8,10 @@ ridiculous horses, and dish out penalties to your friends when you win.
 ## The rules
 
 - One person **makes a lobby** and shares its **5-number code** (or the invite link, `?room=CODE`).
-- Every race, **4 to 6 horses** show up at random, each with one of **200 funny names**. The host can instead
-  pick an exact number from **2 to 8** (changing it deals a new set of horses, and everyone picks again).
+- A lobby starts with **4 to 6 horses**, each with one of **200 funny names**. The **same horses race every
+  round**: names, looks, and everyone's pick and bet all carry over (change your pick any time before the
+  start). The host can set **2 to 8 horses** (or roll a random 4–6): new horses join at the end, and taking
+  horses away removes them from the end, so a horse added back later is brand new.
 - Each player **picks a horse and bets 1 to 20 chips**. Several people can back the same horse, but only the
   **first person to pick it can name it and style it** (🎨 Customize, purely cosmetic): the horse's coat and
   its mane and tail (8 natural colours, 12 bright ones, 15 wild patterns like zebra, rainbow, galaxy and

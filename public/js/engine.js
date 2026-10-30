@@ -4,20 +4,20 @@ import { NAMES } from './names.js';
 import { cleanLook, isCustom } from './looks.js';
 import { simulate, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES, effectCap } from './sim.js';
 
-export const PROTO = 6;               // bump when the message format, rules or race simulation change
+export const PROTO = 7;               // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
 export const MAX_BET = 20;
 export const PENALTY_MULT = 2;        // winners dish out 2x their bet in penalties
 export const MAX_PLAYERS = 16;
-// The host picks how many horses run (2 to 8), or leaves it on random, which deals 4 to 6 each race.
+// A lobby starts with 4 to 6 horses at random. The host can set any number from 2 to 8 (or roll a random 4-6).
+// The same horses race every round (names, looks and everyone's pick all carry over); adding horses puts new
+// ones on the end, removing takes them off the end.
 export const MIN_HORSES = 2;
 export const MAX_HORSES = 8;
 export const RANDOM_MIN = 4;
 export const RANDOM_MAX = 6;
-/** The lobby's horse setting: 0 = random 4-6, otherwise the exact number. */
-export const horseSetting = s => s.horseCount || 0;
 
 // Saddle cloth / silks colours by lane, the classic racing set:
 // 1 red, 2 white, 3 blue, 4 yellow, 5 green, 6 black, 7 orange, 8 pink.
@@ -66,6 +66,7 @@ export function newRoom(code, host, now = Date.now()) {
     race: null, res: null, log: [], logId: 0,
   };
   addPlayer(s, host);
+  setFieldSize(s, randomFieldSize());
   newRace(s);
   s.log = [];
   log(s, `${s.players[host.pid].name} opened the lobby`);
@@ -101,27 +102,46 @@ export function setOnline(s, pid, on) {
   return true;
 }
 
-/** Next race: a fresh field of horses with random funny names. */
+/**
+ * Next race. The same horses run again, looking just the same, and everyone's pick (and bet) from last race
+ * is already selected for them; they can change it before the start.
+ */
 export function newRace(s, rand = Math.random) {
-  dealHorses(s, rand);
+  if (!s.horses.length) setFieldSize(s, randomFieldSize(rand), rand);
+  for (const pid in s.picks) {
+    if (!s.players[pid] || !(s.picks[pid].h < s.horses.length)) delete s.picks[pid];
+  }
   s.raceNo++;
   s.phase = 'betting';
   s.race = null;
   s.res = null;
 }
 
-/** Deal the horses for this race (as many as the host chose, or 4-6 at random). Clears everyone's picks. */
-export function dealHorses(s, rand = Math.random) {
-  const n = horseSetting(s) || RANDOM_MIN + Math.floor(rand() * (RANDOM_MAX - RANDOM_MIN + 1));
-  const recent = new Set(s.recent);
-  const pool = shuffle(NAMES.filter(x => !recent.has(x)), rand);
-  const coats = shuffle(COATS.map((c, i) => i), rand);
-  s.horses = [];
-  for (let i = 0; i < n; i++) {
-    s.horses.push({ name: pool[i], orig: pool[i], coat: coats[i % coats.length], by: null });
+export const randomFieldSize = (rand = Math.random) => RANDOM_MIN + Math.floor(rand() * (RANDOM_MAX - RANDOM_MIN + 1));
+
+/**
+ * Make the field n horses long. Horses already there stay exactly as they are. New ones join at the end with
+ * a fresh funny name; taking horses away removes them from the end (with their name, look and anyone's pick),
+ * so a horse added back later is brand new.
+ */
+export function setFieldSize(s, n, rand = Math.random) {
+  n = Math.max(MIN_HORSES, Math.min(MAX_HORSES, n));
+  if (n < s.horses.length) {
+    s.horses = s.horses.slice(0, n);
+    for (const pid in s.picks) if (s.picks[pid].h >= n) delete s.picks[pid];
+    return;
   }
-  s.recent = [...(s.recent || []), ...s.horses.map(h => h.name)].slice(-60);
-  s.picks = {};
+  const taken = new Set([...(s.recent || []), ...s.horses.map(h => h.name), ...s.horses.map(h => h.orig)]);
+  let pool = shuffle(NAMES.filter(x => !taken.has(x)), rand);
+  if (pool.length < n) pool = shuffle(NAMES.filter(x => !s.horses.some(h => h.name === x)), rand);
+  const usedCoats = new Set(s.horses.map(h => h.coat));
+  const coats = shuffle(COATS.map((c, i) => i).filter(i => !usedCoats.has(i)), rand);
+  while (s.horses.length < n) {
+    const name = pool.shift();
+    const coat = coats.length ? coats.shift() : Math.floor(rand() * COATS.length);
+    s.horses.push({ name, orig: name, coat, by: null });
+    s.recent = [...(s.recent || []), name].slice(-60);
+  }
 }
 
 /** pid of the person allowed to rename horse h: whoever picked it first (of the people still on it). */
@@ -225,12 +245,16 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
     case 'horses': {
       if (!isHost) return { ok: false, err: 'Only the host can change how many horses run' };
       if (s.phase !== 'betting') return { ok: false, err: 'You can change the horses between races' };
-      const n = int(a.n);
+      // n = 0 means "roll a random 4-6"
+      let n = int(a.n);
       if (!(n === 0 || (n >= MIN_HORSES && n <= MAX_HORSES))) return { ok: false, err: `Races have ${MIN_HORSES} to ${MAX_HORSES} horses` };
-      if (n === horseSetting(s) && (n === 0 || s.horses.length === n)) return { ok: true };
-      s.horseCount = n;
-      dealHorses(s, rand);   // a new field for this race, so everyone picks again
-      log(s, n ? `${me.name} set the field to ${n} horses (new horses, pick again)` : `${me.name} set the field to random (4 to 6 horses)`);
+      if (n === 0) n = randomFieldSize(rand);
+      const was = s.horses.length;
+      if (n === was) return { ok: true };
+      setFieldSize(s, n, rand);   // keeps the horses that are already there
+      log(s, n > was
+        ? `${me.name} added ${n - was === 1 ? 'a horse' : `${n - was} horses`} (${n} running)`
+        : `${me.name} took ${was - n === 1 ? `#${was} out` : `#${n + 1} to #${was} out`} (${n} running)`);
       return { ok: true };
     }
     case 'gates': {

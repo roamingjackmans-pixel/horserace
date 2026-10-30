@@ -33,21 +33,40 @@ ok(E.apply(s, 'C', { k: 'pick', h: 1, bet: 3 }).ok, 'C picks 1');
 {
   const t = E.newRoom('22222', { pid: 'H', name: 'Hal' }, 1000);
   E.addPlayer(t, { pid: 'G', name: 'Gil' });
-  ok(t.horses.length >= 4 && t.horses.length <= 6, 'random field is 4-6 horses');
-  E.apply(t, 'G', { k: 'pick', h: 0, bet: 3 });
+  ok(t.horses.length >= 4 && t.horses.length <= 6, 'a new lobby has 4-6 horses');
   ok(!E.apply(t, 'G', { k: 'horses', n: 8 }).ok, 'only the host picks the number of horses');
   ok(!E.apply(t, 'H', { k: 'horses', n: 1 }).ok && !E.apply(t, 'H', { k: 'horses', n: 9 }).ok, 'fields are 2 to 8 horses');
-  ok(E.apply(t, 'H', { k: 'horses', n: 8 }).ok && t.horses.length === 8 && !Object.keys(t.picks).length, '8 horses: new field, picks cleared');
+  // style horse 1 (index 0) and bet on it, then add a horse: horse 1 stays exactly as it is
+  E.apply(t, 'H', { k: 'horses', n: 3 });
+  E.apply(t, 'G', { k: 'pick', h: 0, bet: 3 });
+  E.apply(t, 'G', { k: 'look', h: 0, look: { coat: 'rainbow', hat: 'wizard' }, name: 'Sparkle Pony' });
+  const firstThree = JSON.stringify(t.horses);
+  ok(E.apply(t, 'H', { k: 'horses', n: 4 }).ok && t.horses.length === 4, 'add a 4th horse');
+  ok(JSON.stringify(t.horses.slice(0, 3)) === firstThree, 'the horses already there are untouched');
+  ok(t.picks.G && t.picks.G.h === 0 && t.picks.G.bet === 3, 'picks on them stay');
+  ok(!t.horses.slice(0, 3).some(h => h.name === t.horses[3].name), 'the new horse has its own name');
+  // 6 horses, style #6, take it out, put it back: it comes back fresh
+  E.apply(t, 'H', { k: 'horses', n: 6 });
+  E.apply(t, 'H', { k: 'pick', h: 5, bet: 2 });
+  E.apply(t, 'H', { k: 'look', h: 5, look: { coat: 'zebra' }, name: 'Stripey' });
+  ok(t.horses[5].name === 'Stripey' && t.horses[5].look.coat === 'zebra', '#6 styled');
+  ok(E.apply(t, 'H', { k: 'horses', n: 5 }).ok && t.horses.length === 5 && !t.picks.H, 'remove #6: its pick goes too');
+  ok(t.horses[0].name === 'Sparkle Pony' && t.picks.G.h === 0, 'the others are untouched');
+  E.apply(t, 'H', { k: 'horses', n: 6 });
+  ok(t.horses[5].name !== 'Stripey' && !t.horses[5].look, '#6 comes back as a brand new horse');
+  E.apply(t, 'H', { k: 'horses', n: 8 });
   ok(new Set(t.horses.map(h => h.coat)).size === 8 && E.SILKS.length >= 8, '8 horses all look different');
-  E.apply(t, 'H', { k: 'next' }); // not in results: refused, field stays
-  ok(t.horses.length === 8, 'field size sticks');
-  ok(E.apply(t, 'H', { k: 'horses', n: 2 }).ok && t.horses.length === 2, '2 horses');
-  E.apply(t, 'G', { k: 'pick', h: 1, bet: 5 });
-  ok(E.apply(t, 'H', { k: 'start' }, 2000).ok && t.race.n === 2, 'a 2-horse race starts');
+  // a race, then the next race: same horses, same looks, same picks already selected
+  E.apply(t, 'H', { k: 'pick', h: 7, bet: 6 });
+  const before = JSON.stringify(t.horses);
+  ok(E.apply(t, 'H', { k: 'start' }, 2000).ok && t.race.n === 8, 'an 8-horse race starts');
   ok(!E.apply(t, 'H', { k: 'horses', n: 5 }).ok, 'no field changes mid-race');
   E.tick(t, t.race.endsAt);
-  ok(E.apply(t, 'H', { k: 'next' }).ok && t.horses.length === 2, 'next race keeps 2 horses');
-  ok(E.apply(t, 'H', { k: 'horses', n: 0 }).ok && t.horses.length >= 4 && t.horses.length <= 6, 'back to random');
+  ok(E.apply(t, 'H', { k: 'next' }).ok && t.phase === 'betting', 'next race');
+  ok(JSON.stringify(t.horses) === before, 'same horses next race, names and looks and all');
+  ok(t.picks.G.h === 0 && t.picks.G.bet === 3 && t.picks.H.h === 7 && t.picks.H.bet === 6, 'last race\'s picks and bets are already selected');
+  ok(E.ownerOf(t, 0) === 'G', 'the first picker can still style it');
+  ok(E.apply(t, 'H', { k: 'horses', n: 0 }).ok && t.horses.length >= 4 && t.horses.length <= 6 && t.horses[0].name === 'Sparkle Pony', 'random 4-6 keeps the first horses');
 }
 // track length
 ok(E.gatesOf(s) === 20, 'tracks start with 20 gates');
@@ -78,7 +97,7 @@ ok(E.pendingAttackers(s).join() === 'A', 'A still pending');
 ok(!E.apply(s, 'A', { k: 'attack', hits: {} }).ok, 'no mercy: an empty attack is refused');
 ok(E.apply(s, 'A', { k: 'attack', hits: { B: 1 } }).ok && E.pendingAttackers(s).length === 0, 'A attacks');
 ok(!E.apply(s, 'B', { k: 'next' }).ok, 'non-host cannot advance');
-ok(E.apply(s, 'A', { k: 'next' }).ok && s.phase === 'betting' && s.raceNo === 2 && !Object.keys(s.picks).length, 'next race');
+ok(E.apply(s, 'A', { k: 'next' }).ok && s.phase === 'betting' && s.raceNo === 2 && s.picks.B && s.picks.B.h === 0, 'next race (picks carry over)');
 ok(s.players.A.chips === 20, 'tallies persist across races');
 // host leaves, Bob takes over
 E.setOnline(s, 'A', false);
