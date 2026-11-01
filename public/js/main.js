@@ -62,6 +62,10 @@ const me = () => ui.room && ui.room.me;
 // in the browser console: hrTrace() shows how this tab's connection went
 window.hrTrace = () => (ui.room && ui.room.trace ? ui.room.trace.join(' | ') : '');
 const myPid = () => (ui.room ? ui.room.me.pid : null);
+/** This browser is a game screen (a TV or laptop the room watches): it shows the lobby but doesn't play. */
+const isScreen = () => !!(ui.room && ui.room.me.screen);
+/** The address people type on their phone to join. */
+const joinUrl = () => (location.host + location.pathname).replace(/index\.html$/, '').replace(/\/$/, '');
 const pname = (s, pid) => (s.players[pid] ? s.players[pid].name : 'Someone');
 const pav = (s, pid) => (s.players[pid] ? s.players[pid].av : '❔');
 
@@ -120,6 +124,7 @@ nameInput.addEventListener('input', () => { profile.name = nameInput.value.trim(
 $('#avatarBtn').onclick = () => { unlock(); avatarPicker(profile.av, av => { profile.av = av; store.set('hr_av', av); $('#avatarBtn').textContent = av; }); };
 codeInput.addEventListener('input', () => { codeInput.value = cleanCode(codeInput.value); });
 $('#createBtn').onclick = () => createLobby();
+$('#screenBtn').onclick = () => createScreen();
 $('#joinForm').onsubmit = e => { e.preventDefault(); joinLobby(codeInput.value); };
 const v = window.HR_VERSION;
 if (v) $('#buildTag').textContent = `v${v.version}${v.commit && v.commit !== 'dev' ? ' · ' + v.commit : ''}`;
@@ -139,7 +144,7 @@ function readProfile() {
   store.set('hr_name', name);
   return true;
 }
-function setBusy(b) { $('#createBtn').disabled = b; $('#joinBtn').disabled = b; }
+function setBusy(b) { $('#createBtn').disabled = b; $('#screenBtn').disabled = b; $('#joinBtn').disabled = b; }
 
 async function createLobby() {
   unlock(); sfx.click();
@@ -154,6 +159,24 @@ async function createLobby() {
     saveSeat(code, player.pid);
     showRoom();
     toast(`Lobby ${code} is open! Share the code with your friends.`, 'good');
+  } catch (e) {
+    console.warn(e);
+    unbindRoom(room);
+    homeMsg(e.message || 'Could not make a lobby. Check your internet and try again.');
+  } finally { setBusy(false); }
+}
+
+/** Make a lobby on this screen (a TV or laptop): it shows everything but doesn't play. */
+async function createScreen() {
+  unlock(); sfx.click();
+  setBusy(true);
+  homeMsg('Setting up the game screen…', true);
+  const room = new Room({ pid: 'screen-' + rid(10), tab: TAB, name: 'Game screen', av: '📺', screen: true });
+  bindRoom(room);
+  try {
+    const code = await room.create();
+    showRoom();
+    toast(`Lobby ${code} is open! Everyone joins on their phone.`, 'good');
   } catch (e) {
     console.warn(e);
     unbindRoom(room);
@@ -196,6 +219,7 @@ let unsub = [];
 function bindRoom(room) {
   ui.room = room;
   ui.state = null; ui.stageKey = ''; ui.lastPhase = null; ui.lastRace = 0; ui.draft = {};
+  clearTimeout(ui.bossTimer); ui.bossTimer = 0; ui.wasBoss = false;
   unsub = [
     room.on('state', s => onState(s)),
     room.on('status', t => { const el = $('#status'); el.hidden = !t; el.textContent = t || ''; }),
@@ -214,11 +238,17 @@ function unbindRoom(room) {
 }
 
 function showRoom() {
+  const tv = isScreen();
+  document.body.classList.toggle('tv', tv);
+  $('#leaveBtn').textContent = tv ? 'Close' : 'Leave';
+  $('#achTopBtn').hidden = tv;
+  $('#fullBtn').hidden = !tv || !document.fullscreenEnabled;
   $('#home').hidden = true;
   $('#room').hidden = false;
   stopHomeHorse();
   const url = new URL(location.href);
-  url.searchParams.set('room', ui.room.code);
+  // (a game screen's address isn't a join link, so opening it again later doesn't join as a player)
+  if (tv) url.searchParams.delete('room'); else url.searchParams.set('room', ui.room.code);
   history.replaceState(null, '', url);
   $('#codeText').textContent = ui.room.code;
   document.title = `Lobby ${ui.room.code} | Horse Race`;
@@ -228,6 +258,7 @@ function showRoom() {
 
 function showHome(msg) {
   stopRace();
+  document.body.classList.remove('tv');
   $('#room').hidden = true;
   $('#home').hidden = false;
   $('#status').hidden = true;
@@ -244,11 +275,12 @@ function onClosed(msg) {
   const room = ui.room;
   tabStore.del('hr_session');
   if (room) unbindRoom(room);
+  const tv = room && room.me.screen;
   const code = room && room.code;
   showHome();
-  if (code) codeInput.value = code;
+  if (code && !tv) codeInput.value = code;
   modal((el, close) => {
-    el.innerHTML = `<h2>Disconnected</h2><p>${esc(msg || 'Lost the connection to the lobby.')}</p><div class="row"><button class="btn" data-home>OK</button>${code ? `<button class="btn primary" data-retry>Try to rejoin</button>` : ''}</div>`;
+    el.innerHTML = `<h2>Disconnected</h2><p>${esc(msg || 'Lost the connection to the lobby.')}</p><div class="row"><button class="btn" data-home>OK</button>${code && !tv ? `<button class="btn primary" data-retry>Try to rejoin</button>` : ''}</div>`;
     el.querySelector('[data-home]').onclick = close;
     const r = el.querySelector('[data-retry]');
     if (r) r.onclick = () => { close(); joinLobby(code); };
@@ -256,7 +288,10 @@ function onClosed(msg) {
 }
 
 $('#leaveBtn').onclick = () => {
-  confirmBox('Leave the lobby?', 'Your chips and penalties stay on the scoreboard if you come back with the same code.', 'Leave', 'Stay', async () => {
+  const tv = isScreen();
+  confirmBox(tv ? 'Close the game screen?' : 'Leave the lobby?',
+    tv ? 'Everyone can keep playing on their phones.' : 'Your chips and penalties stay on the scoreboard if you come back with the same code.',
+    tv ? 'Close' : 'Leave', tv ? 'Keep it open' : 'Stay', async () => {
     const room = ui.room;
     tabStore.del('hr_session');
     if (room) { for (const u of unsub) u(); unsub = []; await room.leave(); ui.room = null; }
@@ -277,6 +312,15 @@ const muteBtn = $('#muteBtn');
 const showMute = () => { muteBtn.textContent = isMuted() ? '🔇' : '🔊'; };
 showMute();
 muteBtn.onclick = () => { unlock(); setMuted(!isMuted()); showMute(); sfx.click(); };
+// full screen, for a game screen on a TV or laptop (the ⛶ button or the F key)
+const toggleFull = () => {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+  else document.documentElement.requestFullscreen().catch(() => { });
+};
+$('#fullBtn').onclick = () => { unlock(); toggleFull(); };
+document.addEventListener('keydown', e => {
+  if (isScreen() && !modalOpen && (e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) toggleFull();
+});
 document.addEventListener('pointerdown', () => unlock(), { once: true });
 
 // keep the screen on while in a lobby (phones)
@@ -296,7 +340,7 @@ window.addEventListener('pagehide', () => {
   ui.room.drop();
 });
 function saveSession() {
-  if (ui.room && ui.state && !ui.room.closed) tabStore.set('hr_session', { code: ui.state.code, pid: myPid(), state: ui.state, offset: ui.room.offset, at: Date.now() });
+  if (ui.room && ui.state && !ui.room.closed) tabStore.set('hr_session', { code: ui.state.code, pid: myPid(), screen: isScreen(), state: ui.state, offset: ui.room.offset, at: Date.now() });
 }
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 
@@ -319,7 +363,24 @@ function onState(s) {
   }
   checkAttacks(s);
   checkAchievements(s);
+  checkBoss(s);
   render();
+}
+
+/**
+ * In a game screen's lobby the first player runs things: tell them when that's them. (After a moment, so a
+ * quick shuffle while everyone reconnects to a new host doesn't count.)
+ */
+function checkBoss(s) {
+  const boss = s.screen && !isScreen() && E.bossOf(s) === myPid();
+  if (!boss) { ui.wasBoss = false; return; }
+  if (ui.wasBoss || ui.bossTimer) return;
+  ui.bossTimer = setTimeout(() => {
+    ui.bossTimer = 0;
+    if (ui.wasBoss || !ui.state || !ui.room || E.bossOf(ui.state) !== myPid()) return;
+    ui.wasBoss = true;
+    toast("You're the host! You pick the track and start each race.", 'good');
+  }, 2500);
 }
 
 function render() {
@@ -334,9 +395,9 @@ function render() {
 
 // ---------------------------------------------------------------- players + tallies
 function renderPlayers(s) {
-  const pid = myPid(), isHost = s.hostPid === pid;
+  const pid = myPid(), boss = E.bossOf(s), isHost = boss === pid;
   const online = s.order.filter(id => s.players[id] && s.players[id].on).length;
-  $('#playerCount').textContent = `${online}/${E.MAX_PLAYERS} here${s.order.length > online ? `, ${s.order.length - online} away` : ''}`;
+  $('#playerCount').textContent = `${online}/${E.MAX_PLAYERS} here${s.order.length > online ? `, ${s.order.length - online} away` : ''}${E.screenOn(s) && !isScreen() ? ' · 📺 on the big screen' : ''}`;
   // ranked by chips won (then fewest penalties), so it reshuffles as each race's results come in
   const board = E.standings(s);
   const ranked = board.some(x => s.players[x.pid].races > 0);   // no ranks until someone has raced
@@ -347,6 +408,10 @@ function renderPlayers(s) {
   const rb = ui.rankBefore && ui.rankBefore.ranked && ((s.phase === 'results' && ui.rankBefore.raceNo === s.raceNo) || (s.phase === 'betting' && ui.rankBefore.raceNo === s.raceNo - 1)) ? ui.rankBefore.ranks : null;
   const box = $('#players');
   const before = new Map([...box.children].map(el => [el.dataset.pid, el.getBoundingClientRect().top]));
+  if (!board.length) {
+    box.innerHTML = `<div class="pempty">${isScreen() ? `Nobody here yet. Join on your phone with code <b>${esc(s.code)}</b>.` : 'Nobody here yet.'}</div>`;
+    return;
+  }
   box.innerHTML = board.map(({ pid: id, rank }) => {
     const p = s.players[id];
     if (!p) return '';
@@ -365,7 +430,7 @@ function renderPlayers(s) {
     return `<div class="player ${id === pid ? 'me' : ''} ${p.on ? '' : 'off'}" data-pid="${esc(id)}">
       ${badge}<div class="pav">${esc(p.av)}</div>
       <div class="pbody">
-        <div class="pname">${esc(p.name)}${id === s.hostPid ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? (p.relay ? '<span class="tag relay" title="Connected through the backup relay (a direct connection didn\'t work for them)">📡 RELAY</span>' : '') : '<span class="tag away">AWAY</span>'}</div>
+        <div class="pname">${esc(p.name)}${id === boss ? '<span class="tag host">HOST</span>' : ''}${id === pid ? '<span class="tag you">YOU</span><button class="pedit" data-edit title="Change name">✏️</button>' : ''}${p.on ? (p.relay ? '<span class="tag relay" title="Connected through the backup relay (a direct connection didn\'t work for them)">📡 RELAY</span>' : '') : '<span class="tag away">AWAY</span>'}</div>
         <div class="ptally"><span>🪙 <b>${p.chips}</b> chips won</span><span>🤕 <b>${p.taken}</b> penalties</span><span title="Achievements unlocked">🏅 <b>${p.ach || 0}</b></span></div>
         ${status ? `<div class="pstatus">${status}</div>` : ''}
       </div>
@@ -436,11 +501,12 @@ function raceLength(gates) {
 function renderBetting(s) {
   // the host is typing a gate count: don't redraw under their fingers (it redraws when they finish)
   if (document.activeElement && document.activeElement.id === 'gatesInput') { ui.stageKey = ''; return; }
-  const pid = myPid(), isHost = s.hostPid === pid, mine = s.picks[pid];
+  const pid = myPid(), boss = E.bossOf(s), isHost = boss === pid, mine = s.picks[pid];
+  const tv = isScreen();   // a game screen: shows the horses and everyone's bets, but doesn't bet
   const online = s.order.filter(id => s.players[id] && s.players[id].on);
   const G = E.gatesOf(s);
   const hn = s.horses.length;
-  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, s.hostPid, pid, ui.bet, online, G, s.order.map(id => s.players[id] && s.players[id].name)]);
+  const key = JSON.stringify(['bet', s.raceNo, s.horses, s.picks, boss, pid, ui.bet, online, G, s.order.map(id => s.players[id] && s.players[id].name)]);
   if (key === ui.stageKey) return;
   ui.stageKey = key;
   const presets = [[7, 'Quick'], [20, 'Classic'], [50, 'Long'], [100, 'Marathon']];
@@ -459,7 +525,7 @@ function renderBetting(s) {
            <div class="quick presets"><button data-hrandom>🎲 Random ${E.RANDOM_MIN}–${E.RANDOM_MAX}</button></div>`
       : `<b class="gcount">${hn} horses</b>`}
       </div>
-      <div class="track-note">Races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : `${esc(pname(s, s.hostPid))} picks the track and the horses`}</div>
+      <div class="track-note">Races take ${raceLength(G)} · ${isHost ? `${E.MIN_HORSES} to ${E.MAX_HORSES} horses, or random` : boss ? `${esc(pname(s, boss))} picks the track and the horses` : 'The first player to join picks the track and the horses'}</div>
     </div>`;
   const cards = s.horses.map((h, i) => {
     const bs = E.backers(s, i);
@@ -471,7 +537,7 @@ function renderBetting(s) {
     if (h.by && h.name !== h.orig) meta += ` · was “${esc(h.orig)}”`;
     if (h.look && h.styledBy && h.styledBy !== owner) meta += ` · styled by ${esc(pname(s, h.styledBy))}`;
     const chips = bs.map((id, k) => `<span class="backer ${k === 0 ? 'first' : ''} ${id === pid ? 'is-me' : ''}">${esc(pav(s, id))} ${esc(pname(s, id))} · ${s.picks[id].bet}</span>`).join('');
-    return `<div class="horse-card ${isMine ? 'mine' : ''}" role="button" tabindex="0" data-h="${i}" aria-label="Pick horse ${i + 1}, ${esc(h.name)}">
+    return `<div class="horse-card ${isMine ? 'mine' : ''}" ${tv ? '' : `role="button" tabindex="0" aria-label="Pick horse ${i + 1}, ${esc(h.name)}"`} data-h="${i}">
       <span class="num" style="background:${E.SILKS[i].bg};color:${E.SILKS[i].fg}">${i + 1}</span>
       ${isMine ? '<span class="mine-badge">YOUR PICK</span>' : ''}
       <canvas data-portrait="${i}"></canvas>
@@ -485,20 +551,31 @@ function renderBetting(s) {
   const summary = mine
     ? `You're betting <b>${plural(mine.bet, 'chip')}</b> on <b>#${mine.h + 1} ${esc(s.horses[mine.h].name)}</b>. If it wins you get ${plural(mine.bet, 'chip')} and <b>${mine.bet * E.PENALTY_MULT} penalties</b> to hand out. If it loses, you take <b>${plural(mine.bet, 'penalty', 'penalties')}</b>.`
     : 'Tap a horse to bet on it.';
-  const hostName = esc(pname(s, s.hostPid));
-  $('#stage').innerHTML = `<div class="card panel">
+  const hostName = esc(pname(s, boss));
+  // a game screen leads with how to join
+  const join = tv ? `<div class="card tv-join">
+      <div class="tvj-text">
+        <div class="tvj-step">📱 Join on your phone</div>
+        <div class="tvj-url">${esc(joinUrl())}</div>
+        <div class="tvj-note">${boss ? `<b>${hostName}</b> is the host: they pick the track and start each race from their phone.` : 'The first player to join is the host: they pick the track and start each race from their phone.'}</div>
+      </div>
+      <div class="tvj-code"><small>Lobby code</small>${esc(s.code)}</div>
+    </div>` : '';
+  $('#stage').innerHTML = `${join}<div class="card panel">
     <div class="phase-head"><h2>Race ${s.raceNo}</h2><span class="sub">${s.horses.length} horses · ${G} gates</span></div>
-    <p class="hint">Pick a horse and bet 1 to 20 chips. Lots of people can back the same horse, but only the first to pick it gets to name it and dress it up.</p>
+    <p class="hint">${tv ? 'Everyone picks a horse on their phone and bets 1 to 20 chips.' : 'Pick a horse and bet 1 to 20 chips.'} Lots of people can back the same horse, but only the first to pick it gets to name it and dress it up.</p>
     ${track}
-    <div class="horses">${cards}</div>
-    <div class="betbar">
+    <div class="horses ${tv ? 'view' : ''}">${cards}</div>
+    ${tv ? '' : `<div class="betbar">
       <span class="label">Your bet</span>
       <div class="stepper"><button data-step="-1" aria-label="Bet less">−</button><div class="amt">${ui.bet}<small>chips</small></div><button data-step="1" aria-label="Bet more">+</button></div>
       <div class="quick">${[1, 5, 10, 20].map(n => `<button data-set="${n}" class="${ui.bet === n ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="bet-summary">${summary}</div>
-    </div>
+    </div>`}
     <div class="host-row">
-      ${isHost
+      ${tv
+      ? `<div class="waiting">${online.length ? `🏁 ${hostName} starts the race when everyone's ready (${betCount} of ${online.length} have bet).` : '📱 Waiting for players to join…'}</div>`
+      : isHost
       ? `<button class="btn primary" data-start ${betCount ? '' : 'disabled'}>🏁 Start the race</button><span class="note">${betCount} of ${online.length} ${online.length === 1 ? 'player has' : 'players have'} bet</span>`
       : `<div class="waiting">${mine ? '✅ You\'re in!' : '👆 Pick a horse!'} ${hostName} starts the race when everyone's ready (${betCount} of ${online.length} have bet).</div>`}
     </div>
@@ -506,7 +583,7 @@ function renderBetting(s) {
   // portraits
   $('#stage').querySelectorAll('canvas[data-portrait]').forEach(c => { const i = +c.dataset.portrait; paintPortrait(c, i, s.horses[i].coat, { look: s.horses[i].look }); });
   // pick a horse
-  $('#stage').querySelectorAll('.horse-card').forEach(card => {
+  if (!tv) $('#stage').querySelectorAll('.horse-card').forEach(card => {
     const go = () => {
       const h = +card.dataset.h;
       const cur = s.picks[pid];
@@ -827,7 +904,7 @@ function stopPodium() {
 function renderResults(s) {
   const res = s.res;
   if (!res) return;
-  const pid = myPid(), isHost = s.hostPid === pid;
+  const pid = myPid(), boss = E.bossOf(s), isHost = boss === pid, tv = isScreen();
   const w = res.winner, wh = s.horses[w];
   // the frame with the podium: built once per race
   const shell = `res:${s.code}:${s.raceNo}`;
@@ -841,13 +918,14 @@ function renderResults(s) {
     </div>`;
     startPodium(s);
   }
-  const key = JSON.stringify(['res', s.raceNo, res, s.hostPid, pid, ui.draft, s.order, s.horses.map(h => h.name), s.order.map(id => s.players[id] && [s.players[id].name, s.players[id].on])]);
+  const key = JSON.stringify(['res', s.raceNo, res, boss, pid, ui.draft, s.order, s.horses.map(h => h.name), s.order.map(id => s.players[id] && [s.players[id].name, s.players[id].on])]);
   if (key === ui.stageKey) return;
   ui.stageKey = key;
   const winners = res.payouts.filter(p => p.win);
   const minePo = res.payouts.find(p => p.pid === pid);
   let headline;
-  if (minePo && minePo.win) headline = `🎉 You won ${plural(minePo.bet, 'chip')}!`;
+  if (tv) headline = res.payouts.length ? `${plural(winners.length, 'winner')} from ${plural(res.payouts.length, 'bet')}` : 'Nobody bet on this one';
+  else if (minePo && minePo.win) headline = `🎉 You won ${plural(minePo.bet, 'chip')}!`;
   else if (minePo) headline = `Your horse #${minePo.h + 1} came ${ordinal(res.order.indexOf(minePo.h) + 1)}, so you take ${plural(minePo.bet, 'penalty', 'penalties')}.`;
   else headline = 'You sat this one out.';
   const backedBy = winners.length ? `Backed by ${winners.map(p => `${esc(pav(s, p.pid))} ${esc(pname(s, p.pid))} (+${p.bet})`).join(', ')}` : 'Nobody backed it, so nobody wins chips this race.';
@@ -894,7 +972,7 @@ function renderResults(s) {
   $('#resBody').innerHTML = `
     <p class="backed">${backedBy}</p>
     <div class="host-row next-row">
-      ${isHost ? `<button class="btn primary big-next" data-next>Next race ▶</button>${pending.length || (pool && !res.done[pid]) ? '<span class="note">Winners are still handing out penalties</span>' : ''}` : `<div class="waiting">${esc(pname(s, s.hostPid))} will start the next race.</div>`}
+      ${isHost ? `<button class="btn primary big-next" data-next>Next race ▶</button>${pending.length || (pool && !res.done[pid]) ? '<span class="note">Winners are still handing out penalties</span>' : ''}` : `<div class="waiting">${boss ? `${esc(pname(s, boss))} will start the next race.` : 'Waiting for a player to start the next race…'}</div>`}
     </div>
     ${panel}
     ${attacks}
@@ -968,6 +1046,7 @@ function checkAttacks(s) {
 // ---------------------------------------------------------------- achievements
 /** Anything new unlocked in this state? Save, pop up each one, and tell the lobby. */
 function checkAchievements(s) {
+  if (isScreen()) return;
   const fresh = observe(achProg, s, myPid());
   if (achProg.dirty) {
     achProg.dirty = false;
@@ -1056,8 +1135,10 @@ window.addEventListener('resize', () => { if (ui.state && ui.state.phase !== 'ra
   const saved = tabStore.get('hr_session');
   if (saved && saved.state && Date.now() - saved.at < 6 * 3600e3 && (!urlCode || urlCode === saved.code)) {
     // reloaded the page while in a lobby: go straight back in
-    const player = { pid: saved.pid, tab: TAB, name: profile.name || 'Mystery Guest', av: profile.av, ach: achCount() };
-    const sp = saved.state.players && saved.state.players[saved.pid];
+    const player = saved.screen
+      ? { pid: saved.pid, tab: TAB, name: 'Game screen', av: '📺', screen: true }
+      : { pid: saved.pid, tab: TAB, name: profile.name || 'Mystery Guest', av: profile.av, ach: achCount() };
+    const sp = !saved.screen && saved.state.players && saved.state.players[saved.pid];
     if (sp) { player.name = sp.name; player.av = sp.av; }
     const room = new Room(player);
     bindRoom(room);

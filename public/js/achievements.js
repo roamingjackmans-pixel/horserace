@@ -6,6 +6,10 @@
 // are exactly what everyone watched.
 import { hopCap, leadCap } from './sim.js';
 
+// who runs the lobby: the host, or in a game screen's lobby the first player still here (engine.js bossOf;
+// copied here so the two files don't import each other)
+const bossOf = s => (s.screen ? s.order.find(id => s.players[id] && s.players[id].on) || null : s.hostPid);
+
 export const GROUPS = ['Getting started', 'Winning', 'Losing', 'Attacking', 'Race moments', 'Tracks', 'Style & friends'];
 
 // goal: [lifetime stat, target] for the ones that count up (shown as progress)
@@ -166,7 +170,7 @@ export function observe(prog, s, pid, now = Date.now()) {
   };
 
   // the lobby itself
-  if (s.hostPid === pid) unlock('host');
+  if (bossOf(s) === pid) unlock('host');
   if (s.order.filter(id => s.players[id] && s.players[id].on).length >= 8) unlock('full-house');
   for (const horse of s.horses || []) {
     if (horse.styledBy === pid && horse.look) {
@@ -236,7 +240,8 @@ export function observe(prog, s, pid, now = Date.now()) {
         if (targets.length === 1 && a.total >= 10) unlock('vendetta');
         if (targets.length >= 4) unlock('sharing');
         if (targets.some(t => hitBy.includes(t))) unlock('revenge');
-        if (pid !== s.hostPid && targets.includes(s.hostPid)) unlock('bite');
+        const boss = bossOf(s);
+        if (boss && pid !== boss && targets.includes(boss)) unlock('bite');
       } else if (mine) {
         st.taken += mine;
         unlock('first-hit');

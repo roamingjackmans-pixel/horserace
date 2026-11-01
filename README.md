@@ -54,6 +54,22 @@ ridiculous horses, and dish out penalties to your friends when you win.
   share a rank). It reshuffles as each race's results come in, rows slide to their new places, and ▲▼ shows who
   moved since the last race. Ranks appear once someone has raced.
 
+## Playing on a big screen
+
+There are two ways to make a lobby:
+
+- **🎮 Make a lobby**: you play on the device you made it on and you're the host.
+- **📺 Host on a big screen**: for a TV or laptop the whole room can see. That screen becomes the **game
+  screen**: it shows how to join (the address and a big lobby code), the horses with everyone's bets, the races,
+  the podium, the leaderboard and what happened, but it **doesn't play** (no bets, no buttons, no achievements,
+  and it doesn't take one of the 8 seats). Everyone plays on their own phone.
+  - The **first player to join is the host** (HOST tag): they set the track and the horses, start each race and
+    remove players who left, from their phone. If they leave, the next player in join order takes over, and they
+    get it back when they return. Each new host gets a "You're the host!" popup.
+  - **⛶** (or the F key) puts the game screen in full screen. **Close** shuts the game screen; everyone can keep
+    playing on their phones.
+  - Phones show "📺 on the big screen" next to the player count while the game screen is connected.
+
 ## Achievements
 
 There are **50 achievements** (🏅 on the home screen and in the lobby's top bar), in seven groups: getting
@@ -114,6 +130,13 @@ on hosting with the last state everyone had: tallies, picks and a race in progre
 reconnects to them automatically. A host who just reloads the page grabs their lobby straight back. Players who
 reload or drop out get their old seat (and tallies) back when they return.
 
+**A game screen hosts the same way, but isn't a player.** Its lobby has `screen: true` and no player for the
+screen; `engine.js` `bossOf()` decides who runs the lobby (the host, or in a game screen's lobby the first
+player still here), and every host-only action checks that. A game screen that reloads grabs its lobby straight
+back (like any host). If it's gone longer (a closed laptop, a crashed TV browser), a phone takes over hosting
+as above and the game carries on; when the screen comes back it joins as a screen (its hello says
+`screen: true`), so it watches without taking a seat, and it goes to the back of the line for hosting.
+
 ## Play locally
 
 ```bash
@@ -121,12 +144,14 @@ npm start
 ```
 
 Open http://localhost:8090. To try multiplayer on one computer, open a second tab, give it a different name
-and join the code. (Tabs in one browser share the saved name, so rename yourself with the ✏️ button.)
+and join the code. (Tabs in one browser share the saved name, so rename yourself with the ✏️ button.) To try a
+game screen, tap **Host on a big screen** in one tab and join it from two others.
 
 ## Tests
 
 ```bash
-node tools/enginetest.mjs     # the rules: picks, rename rights, payouts, penalty limits, 8-player cap
+node tools/enginetest.mjs     # the rules: picks, rename rights, payouts, penalty limits, 8-player cap,
+                              # game screen lobbies (who runs them, the screen dropping out and coming back)
 node tools/simstats.mjs 3000  # race length, gate stops per race, lane fairness, determinism
 node tools/achtest.mjs        # achievements: the list, unlocks from real races and attacks, counted once
 ```

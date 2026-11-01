@@ -138,5 +138,41 @@ ok(JSON.stringify(s).length < 6000, 'state stays small: ' + JSON.stringify(s).le
   ok(!E.addPlayer(t, { pid: 'p1', name: 'P1' }).ok, 'the player who left can not squeeze back into a full lobby');
   ok(E.addPlayer(t, { pid: 'p2', name: 'P2' }).ok, 'someone already here reconnecting is fine');
 }
+// a lobby made on a game screen: the screen doesn't play, the first player still here runs the game
+{
+  const t = E.newRoom('33333', { pid: 'tv', name: 'Game screen', screen: true }, 1000);
+  ok(t.screen && t.order.length === 0 && !t.players.tv, 'the game screen is not a player');
+  ok(t.hostPid === 'tv' && E.screenOn(t) && E.bossOf(t) === null, 'nobody runs an empty screen lobby');
+  ok(!E.apply(t, 'tv', { k: 'gates', n: 7 }).ok && !E.apply(t, 'tv', { k: 'start' }).ok, 'the screen can not do anything');
+  for (const [pid, name] of [['a', 'Ann'], ['b', 'Bob'], ['c', 'Cat']]) E.addPlayer(t, { pid, name });
+  ok(E.bossOf(t) === 'a', 'the first player to join runs it');
+  for (let i = 3; i < E.MAX_PLAYERS; i++) E.addPlayer(t, { pid: 'x' + i, name: 'X' + i });
+  ok(t.order.length === E.MAX_PLAYERS, 'the screen does not take up a seat: 8 players fit');
+  ok(!E.apply(t, 'b', { k: 'gates', n: 7 }).ok && E.apply(t, 'a', { k: 'gates', n: 7 }).ok, 'only the first player sets the track');
+  ok(E.apply(t, 'a', { k: 'horses', n: 3 }).ok && t.horses.length === 3, 'and the horses');
+  E.apply(t, 'b', { k: 'pick', h: 0, bet: 4 });
+  E.apply(t, 'a', { k: 'pick', h: 1, bet: 2 });
+  ok(!E.apply(t, 'b', { k: 'start' }).ok && E.apply(t, 'a', { k: 'start' }, 2000).ok, 'and starts the race');
+  t.race.winner = 0; E.tick(t, t.race.endsAt);
+  ok(t.res.pools.b === 8 && !('tv' in t.res.pools), 'the race pays out to players only');
+  E.setOnline(t, 'a', false);
+  ok(E.bossOf(t) === 'b', 'when the first player leaves, the next one takes over');
+  ok(!E.apply(t, 'a', { k: 'next' }).ok && E.apply(t, 'b', { k: 'next' }).ok, 'Bob starts the next race');
+  ok(E.addPlayer(t, { pid: 'a', name: 'Ann' }).back && E.bossOf(t) === 'a', 'Ann gets it back when she returns');
+  // the screen drops out: a phone takes over hosting, the first player still runs things
+  E.takeOver(t, 'c', 0);
+  ok(t.hostPid === 'c' && !E.screenOn(t) && t.screen, 'a phone keeps the game going without the screen');
+  ok(/game screen dropped out/.test(t.log[t.log.length - 1].msg), 'the log says the screen dropped out');
+  ok(E.bossOf(t) === 'c', 'until the others reconnect, the phone that is here runs it');
+  E.addPlayer(t, { pid: 'a', name: 'Ann' });
+  ok(E.bossOf(t) === 'a', 'Ann runs it again once she reconnects (not the hosting phone)');
+  ok(E.setScreen(t, 'tv', true) && E.screenOn(t) && !t.players.tv, 'the screen comes back to watch');
+  ok(E.setScreen(t, 'tv', false) && !E.screenOn(t) && !E.setScreen(t, 'nope', false), 'and can go again');
+  // the screen takes its lobby back (a reload)
+  E.takeOver(t, 'tv', 0);
+  ok(t.hostPid === 'tv' && E.screenOn(t) && E.bossOf(t) === null && !t.players.tv, 'the screen hosts again; everyone reconnects');
+  E.addPlayer(t, { pid: 'b', name: 'Bob' });
+  ok(E.bossOf(t) === 'b', 'whoever is back first runs it for now');
+}
 console.log(fails ? `${fails} failed` : 'all engine checks passed');
 process.exit(fails ? 1 : 0);

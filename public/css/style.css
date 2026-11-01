@@ -91,6 +91,10 @@ input {
   background: #fff; color: var(--ink); min-width: 0; width: 100%; outline: none;
 }
 input:focus { border-color: var(--gold); }
+.home-card .btn.big { font-size: 20px; padding: 13px 16px; }
+.screen-btn { margin-top: 12px; }
+@media (max-width: 420px) { .home-card .btn.big { font-size: 18px; padding: 12px 10px; } }
+.screen-note { margin: 8px 6px 0; font-size: 13.5px; line-height: 1.35; color: var(--muted); text-align: center; }
 .or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; margin: 18px 0 12px; }
 .or::before, .or::after { content: ''; flex: 1; border-top: 1px dashed var(--line); }
 .join-row { display: flex; gap: 10px; }
@@ -465,3 +469,23 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--red); flex: 1 1 1
 .pmove { display: block; font-size: 10px; font-weight: 700; letter-spacing: -.02em; }
 .pmove.up { color: var(--green); }
 .pmove.down { color: var(--red); }
+
+/* ---------- game screen: a TV or laptop the room watches (body.tv) ---------- */
+body.tv .layout { max-width: 1800px; grid-template-columns: minmax(0, 1fr) 340px; }
+.tv-join {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 28px;
+  padding: 18px 26px; margin-bottom: 16px;
+}
+.tvj-text { min-width: 0; flex: 1 1 320px; }
+.tvj-step { font-size: 19px; font-weight: 600; color: var(--muted); }
+.tvj-url { font-size: clamp(24px, 2.8vw, 40px); font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.tvj-note { margin-top: 8px; font-size: 16px; color: #4a3f33; line-height: 1.35; }
+.tvj-code {
+  flex: 0 0 auto; text-align: center; line-height: 1; font-weight: 700;
+  font-size: clamp(44px, 6vw, 80px); letter-spacing: .14em; padding: 10px 14px 14px 26px;
+  background: var(--gold); color: #3a2a05; border-radius: 20px; box-shadow: 0 5px 0 var(--gold-dark);
+}
+.tvj-code small { display: block; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; opacity: .75; margin: 0 0 6px -12px; }
+.horses.view .horse-card { cursor: default; }
+.horses.view .horse-card:hover { transform: none; }
+.pempty { color: var(--muted); font-size: 14.5px; line-height: 1.4; padding: 4px 2px 8px; }

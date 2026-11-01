@@ -4,6 +4,10 @@
 // (engine.js). Everyone else connects straight to the host's browser using the free PeerJS matchmaking
 // service. The room code is the host's PeerJS id, so joining is just "connect to jjhorserace-v1-<code>".
 //
+// A lobby can also be made on a game screen (a TV or laptop everyone watches, me.screen). The screen hosts
+// the same way but isn't a player. If it drops out, a phone takes over hosting as below and the game carries
+// on; when the screen comes back it joins as a screen (it says so in its hello) and just watches.
+//
 // If the host disappears (closed the tab, phone went to sleep, left), the other players notice, and the
 // first one in line claims the room code and carries on hosting with the last state everyone had.
 // Everyone else reconnects to the new host. Tallies, picks and the race in progress all survive.
@@ -143,6 +147,7 @@ export class Room extends Emitter {
     this.closed = true;
     if (this.role === 'host' && this.state) {
       E.setOnline(this.state, this.me.pid, false);
+      E.setScreen(this.state, this.me.pid, false);
       this._broadcast();
       for (const c of this.conns.values()) this._send(c, { t: 'moved' });
       this.role = 'leaving';   // stop taking new connections while we let go
@@ -211,9 +216,12 @@ export class Room extends Emitter {
         if (!id) return drop({ t: 'err', code: 'bad', msg: 'Bad hello' });
         if (id === this.me.pid) return drop({ t: 'err', code: 'dup', msg: 'You are already in this lobby in another tab' });
         const prev = this.conns.get(id);
-        if (prev && prev.open && prev._tab !== m.tab) return drop({ t: 'err', code: 'dup', msg: 'You are already in this lobby in another tab' });
-        const r = E.addPlayer(this.state, { pid: id, name: m.name, av: m.av, relay: !!conn.relay, ach: m.ach });
-        if (!r.ok) return drop({ t: 'err', code: 'full', msg: r.err });
+        if (prev && prev.open && prev._tab !== m.tab) return drop({ t: 'err', code: 'dup', msg: m.screen ? 'This game screen is open in another tab' : 'You are already in this lobby in another tab' });
+        if (m.screen) E.setScreen(this.state, id, true);    // a game screen: watches, doesn't play
+        else {
+          const r = E.addPlayer(this.state, { pid: id, name: m.name, av: m.av, relay: !!conn.relay, ach: m.ach });
+          if (!r.ok) return drop({ t: 'err', code: 'full', msg: r.err });
+        }
         if (prev) { this.conns.delete(id); this._send(prev, { t: 'err', code: 'replaced', msg: 'This lobby was opened in another tab' }); setTimeout(() => { try { prev.close(); } catch { } }, 300); }
         pid = id; conn._pid = id; conn._tab = m.tab;
         this.conns.set(id, conn);
@@ -230,7 +238,7 @@ export class Room extends Emitter {
       }
       else if (m.t === 'leave') {
         this.conns.delete(pid);
-        if (E.setOnline(this.state, pid, false)) this._changed();
+        if (E.setOnline(this.state, pid, false) || E.setScreen(this.state, pid, false)) this._changed();
         try { conn.close(); } catch { }
       }
     });
@@ -238,7 +246,7 @@ export class Room extends Emitter {
       clearTimeout(helloTimer);
       if (pid && this.conns && this.conns.get(pid) === conn) {
         this.conns.delete(pid);
-        if (this.role === 'host' && E.setOnline(this.state, pid, false)) this._changed();
+        if (this.role === 'host' && (E.setOnline(this.state, pid, false) || E.setScreen(this.state, pid, false))) this._changed();
       }
     });
     conn.on('error', () => { });
@@ -308,6 +316,7 @@ export class Room extends Emitter {
     return openPeer(null).catch(() => null).then(peer => new Promise((resolve, reject) => {
       if (this.closed) { if (peer) { try { peer.destroy(); } catch { } } return reject(netErr('closed', 'Closed')); }
       const hello = { t: 'hello', v: E.PROTO, pid: this.me.pid, tab: this.me.tab, name: this.me.name, av: this.me.av, ach: this.me.ach };
+      if (this.me.screen) hello.screen = true;
       const relay = new RelayGuest(code).prepare();
       let rtc = null, path = null, joined = false, failed = false, slow = 0, relayWhy = '';
       this._t(`join ${code}${peer ? '' : ' (no matchmaking service)'}`);
@@ -483,7 +492,7 @@ export class Room extends Emitter {
     const line = last.order.filter(id => last.players[id] && last.players[id].on && id !== last.hostPid)
       .sort((a, b) => (last.players[a].relay ? 1 : 0) - (last.players[b].relay ? 1 : 0));
     let rank = line.indexOf(this.me.pid);
-    if (rank < 0) rank = 0;
+    if (rank < 0) rank = this.me.screen ? line.length : 0;   // a game screen that was watching goes after the players
     const deadline = Date.now() + 120000;
     let round = 0;
     // a host coming back from a reload tries to grab its room back straight away
@@ -526,14 +535,15 @@ export class Room extends Emitter {
     catch (e) { this._t(`take over hosting: ${e.code === 'unavailable-id' ? 'someone else got there first' : e.code}`); if (e.code !== 'unavailable-id') await sleep(1500); return false; }
     if (this.closed) { try { peer.destroy(); } catch { } return false; }
     const s = clone(last);
-    if (!s.players[this.me.pid]) E.addPlayer(s, this.me);
+    if (!s.players[this.me.pid] && !this.me.screen) E.addPlayer(s, this.me);
     const wasHost = s.hostPid === this.me.pid;
     E.takeOver(s, this.me.pid, wasHost ? 0 : this.offset);
     this.recovering = false;
     this._t('took over hosting');
     this._host(peer, s);
     this.emit('status', null);
-    if (!wasHost) this.emit('toast', 'You are now hosting this lobby');
+    // (in a game screen's lobby the first player runs things, whichever phone is hosting)
+    if (!wasHost && !s.screen && !this.me.screen) this.emit('toast', 'You are now hosting this lobby');
     return true;
   }
 

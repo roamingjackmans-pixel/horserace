@@ -1,11 +1,16 @@
 // Room state and game rules. Only the host runs these functions; everyone else just receives the state.
 // Every function here is plain data in, plain data out, so it also runs under Node for tests.
+//
+// Two kinds of lobby:
+//  - made on a phone or computer by someone who plays: they run the game (start races, set the track...).
+//  - made on a game screen (s.screen): a TV or laptop the whole room watches. It shows the lobby but doesn't
+//    play, and the first player who joined (and is still here) runs the game from their phone. See bossOf().
 import { NAMES } from './names.js';
 import { cleanLook, isCustom } from './looks.js';
 import { writeRace, playRace, COUNTDOWN, DEFAULT_GATES, MIN_GATES, MAX_GATES } from './sim.js';
 import { ACH_BY_ID, ACH_COUNT } from './achievements.js';
 
-export const PROTO = 10;              // bump when the message format, rules or race simulation change
+export const PROTO = 11;              // bump when the message format, rules or race simulation change
 /** Gates on this lobby's track (older saved lobbies didn't have the setting). */
 export const gatesOf = s => s.gates || DEFAULT_GATES;
 export const MIN_BET = 1;
@@ -59,20 +64,45 @@ function log(s, msg) {
   if (s.log.length > 30) s.log.splice(0, s.log.length - 30);
 }
 
+/** A new lobby. host: the player making it, or a game screen ({ pid, screen: true }), which doesn't play. */
 export function newRoom(code, host, now = Date.now()) {
   const s = {
     v: PROTO, code, hostPid: host.pid, created: now,
-    players: {}, order: [], joinSeq: 0,
+    players: {}, order: [], joinSeq: 0, screen: !!host.screen, screens: {},
     raceNo: 0, phase: 'betting', horses: [], picks: {}, pickSeq: 0, recent: [], gates: DEFAULT_GATES,
     race: null, res: null, log: [], logId: 0,
   };
-  addPlayer(s, host);
+  if (s.screen) s.screens[host.pid] = true; else addPlayer(s, host);
   setFieldSize(s, randomFieldSize());
   newRace(s);
   s.log = [];
-  log(s, `${s.players[host.pid].name} opened the lobby`);
+  log(s, s.screen ? '📺 The lobby is open on the game screen' : `${s.players[host.pid].name} opened the lobby`);
   return s;
 }
+
+/**
+ * Who runs the lobby (starts races, sets the track and horses, removes players who left): the host, or in a
+ * lobby made on a game screen, the first player still here, in the order they joined. If they leave, the next
+ * one takes over, and they get it back when they return. null if nobody is here.
+ */
+export function bossOf(s) {
+  if (!s.screen) return s.hostPid;
+  return s.order.find(id => s.players[id] && s.players[id].on) || null;
+}
+
+/** A game screen connected (on) or went away. Returns true if that changed anything. */
+export function setScreen(s, pid, on) {
+  const screens = (s.screens ||= {});
+  if (!!screens[pid] === on) return false;
+  if (!on && !(pid in screens)) return false;
+  screens[pid] = on;
+  if (on) { if (!(s.quietUntil > Date.now())) log(s, '📺 The game screen is back'); }
+  else log(s, '📺 The game screen left');
+  return true;
+}
+
+/** Is a game screen showing this lobby right now? */
+export const screenOn = s => Object.values(s.screens || {}).some(Boolean);
 
 /** Someone said hello. Adds them, or brings back their old seat (and tallies) if they were here before. */
 export function addPlayer(s, p) {
@@ -190,7 +220,7 @@ export function apply(s, pid, a, now = Date.now(), rand = Math.random) {
   const me = s.players[pid];
   if (!me) return { ok: false, err: 'You are not in this lobby' };
   if (!a || typeof a !== 'object') return { ok: false, err: 'Bad action' };
-  const isHost = pid === s.hostPid;
+  const isHost = pid === bossOf(s);   // (in a game screen's lobby, the first player)
   switch (a.k) {
     case 'pick': {
       if (s.phase !== 'betting') return { ok: false, err: 'Bets are closed' };
@@ -399,11 +429,21 @@ export function pendingAttackers(s) {
  * offset: (old host's clock) - (my clock), so timestamps can be moved onto my clock.
  */
 export function takeOver(s, pid, offset = 0) {
-  const old = s.hostPid !== pid ? s.players[s.hostPid] : null;
+  const was = s.hostPid !== pid ? s.hostPid : null;
+  const old = was ? s.players[was] : null;
+  const oldScreen = !!was && !!s.screens && was in s.screens;
+  const screenLeft = oldScreen && !s.screens[was];   // closed on purpose ("The game screen left" is logged already)
   s.hostPid = pid;
+  // everyone else has to reconnect to us (pid may be a game screen taking its lobby back)
   for (const id in s.players) s.players[id].on = id === pid;
+  for (const id in s.screens || {}) s.screens[id] = id === pid;
   if (s.race) { s.race.startAt -= offset; s.race.endsAt -= offset; }
   s.quietUntil = Date.now() + 30000;   // everyone reconnecting right now is not news
-  const me = s.players[pid] ? s.players[pid].name : 'Someone';
-  log(s, old ? `${me} is now hosting (${old.name} dropped out)` : `${me} is hosting again`);
+  const me = s.players[pid] ? s.players[pid].name : null;
+  if (!me) log(s, '📺 The game screen is back');
+  else if (screenLeft) log(s, "The game carries on on everyone's phones");
+  else if (oldScreen) log(s, "📺 The game screen dropped out. The game carries on on everyone's phones");
+  // in a game screen's lobby, which phone does the hosting doesn't matter to anyone
+  else if (s.screen) log(s, old ? `${old.name} dropped out` : `${me} is back`);
+  else log(s, old ? `${me} is now hosting (${old.name} dropped out)` : `${me} is hosting again`);
 }

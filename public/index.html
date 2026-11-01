@@ -29,7 +29,9 @@
         <button id="avatarBtn" class="avatar-btn" type="button" title="Change your picture">🤠</button>
         <input id="nameInput" maxlength="20" autocomplete="nickname" placeholder="Your name">
       </div>
-      <button id="createBtn" class="btn primary big" type="button">Make a lobby</button>
+      <button id="createBtn" class="btn primary big" type="button">🎮 Make a lobby</button>
+      <button id="screenBtn" class="btn big screen-btn" type="button">📺 Host on a big screen</button>
+      <p class="screen-note">For a TV or laptop the whole room can see. It shows the races but doesn't play, and the first player to join runs the game from their phone.</p>
       <div class="or"><span>or join a friend</span></div>
       <form id="joinForm" class="join-row">
         <input id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" placeholder="5-number code" aria-label="Lobby code">
@@ -43,6 +45,7 @@
       <summary>How to play</summary>
       <ol>
         <li><b>Make a lobby</b> and send your friends the 5-number code (or the invite link). Up to <b>8 players</b> per lobby.</li>
+        <li><b>All in one room?</b> Tap <b>Host on a big screen</b> on a TV or laptop everyone can see. It shows the code, the horses, the races and the leaderboard, but doesn't play. Everyone plays on their own phone, and the <b>first player to join</b> is the host: they pick the track and start each race (if they leave, the next player takes over).</li>
         <li>A lobby starts with <b>4 to 6 horses</b> with silly names (the host can set anywhere from <b>2 to 8</b>). The same horses race every round, and your last pick and bet stay selected until you change them. <b>Pick one and bet 1 to 20 chips.</b> Lots of people can back the same horse, but only the <b>first person</b> to pick it gets to <b>name it and dress it up</b>: zebra stripes, rainbow manes, jetpacks, sombreros and plenty more (just for looks).</li>
         <li>The track has <b>20 gates</b>, or anywhere from <b>3 to 100</b> if the host changes it (try a quick 7-gate race). Horses don't run: each one <b>hops forward one gate at a time, at random</b>, so even a horse way out in front can still lose. Every time <b>all</b> the horses make it through the next gate, the race freezes: one horse gets <b>boosted forward a gate ⚡</b> and another gets <b>set back a gate 🐌</b>.</li>
         <li>If your horse wins, you <b>win the chips you bet</b>, and you get <b>twice your bet in penalties</b> to dish out to anyone else, split however you like, but no mercy: you have to hit at least one person. They get a popup saying you attacked them.</li>
@@ -61,6 +64,7 @@
       <button id="codeBtn" class="code-btn" type="button" title="Copy the invite link">Lobby <b id="codeText">-----</b> <span class="copy">Copy invite</span></button>
       <div class="spacer"></div>
       <button id="achTopBtn" class="icon-btn" type="button" title="Achievements">🏅</button>
+      <button id="fullBtn" class="icon-btn" type="button" title="Full screen (F)" hidden>⛶</button>
       <button id="muteBtn" class="icon-btn" type="button" title="Sound on/off">🔊</button>
       <button id="leaveBtn" class="icon-btn leave" type="button">Leave</button>
     </header>
