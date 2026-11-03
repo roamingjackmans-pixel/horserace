@@ -3,7 +3,7 @@
 A silly online horse racing party game for the browser. Make a lobby, share the 5-number code, bet chips on
 ridiculous horses, and dish out penalties to your friends when you win.
 
-**Play:** https://josephjackman.com/horserace/
+**Play:** https://josephjackman.com/games/horserace/
 
 ## The rules
 
@@ -158,10 +158,12 @@ node tools/achtest.mjs        # achievements: the list, unlocks from real races 
 
 ## Deploying
 
-`.github/workflows/pages.yml` runs the tests and publishes `public/` to GitHub Pages on every push to `main`.
-It shows up at `josephjackman.com/horserace/` because this repo is named `horserace` and the account's user
-site (`roamingjackmans-pixel.github.io`) has the `josephjackman.com` custom domain. The workflow also stamps
-the version and adds `?v=<commit>` to every file URL so phones never mix old and new code.
+`.github/workflows/ready.yml` runs the tests on every push to `main` and then moves the `ready` branch to that
+commit. The [games](https://github.com/roamingjackmans-pixel/games) repo publishes every game on
+josephjackman.com/games/ and puts this one at `josephjackman.com/games/horserace/`: it looks for new `ready`
+commits every 10 minutes, or starts right away when this repo has a `GAMES_DEPLOY_TOKEN` secret. That build
+also stamps the version and adds `?v=<commit>` to every file URL (`tools/stamp-build.mjs`) so phones never mix
+old and new code.
 
 ## Project layout
 
